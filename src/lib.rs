@@ -77,6 +77,10 @@ pub mod errors;
 pub mod statecallback;
 mod virtualdevices;
 
+mod transport;
+mod ctap;
+mod ctap2;
+
 // Keep this in sync with the constants in u2fhid-capi.h.
 bitflags! {
     pub struct RegisterFlags: u64 {
