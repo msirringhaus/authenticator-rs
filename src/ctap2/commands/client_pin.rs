@@ -12,8 +12,7 @@ use crate::ctap::ClientDataHash;
 
 // use serde::Deserialize; cfg[test]
 
-#[derive(Debug, Clone, PartialEq)]
-// #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
     pub curve: SignatureAlgorithm,
     // TODO(baloo): yeah, I know jcj :) I shouldn't be using bytes in asn.1 here :p
