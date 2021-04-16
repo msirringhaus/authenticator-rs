@@ -1,4 +1,9 @@
-use super::*; 
+use super::{Retryable, Error, RequestCtap1};
+use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
+use std::io;
+use std::ffi::CString;
+use crate::consts::U2F_VERSION;
+use crate::u2ftypes::U2FAPDUHeader;
 
 pub enum U2FInfo {
     U2F_V2,
@@ -46,7 +51,7 @@ impl RequestCtap1 for GetVersion {
         }
     }
 
-    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {

@@ -17,6 +17,9 @@ use get_info::GetInfo;
 pub mod client_pin;
 use client_pin::{Pin, PinAuth, PinError, GetKeyAgreement, GetPinToken};
 
+// pub mod get_assertion;
+pub mod get_version;
+
 #[derive(Debug)]
 pub enum NSSError {
     ImportCertError,
@@ -508,14 +511,16 @@ impl From<NSSError> for Error {
 pub mod test {
     use serde_cbor::de::from_slice;
 
-    use super::{AuthenticatorInfo, MakeCredentials, Request};
+    use super::{get_info::AuthenticatorInfo, Request};
     use crate::ctap::{CollectedClientData, Origin, WebauthnType};
+    use crate::ctap2::commands::make_credentials::MakeCredentials;
     use crate::ctap2::server::{
         Alg, PublicKeyCredentialParameters, RelyingParty, RelyingPartyData, User,
     };
-    use crate::transport::hid::HIDDevice;
-    use crate::transport::platform::device::Device;
-    use crate::transport::platform::TestCase;
+//     use crate::transport::hid::HIDDevice;
+//     use crate::transport::platform::device::Device;
+    use crate::platform::device::Device;
+//     use crate::transport::platform::TestCase;
 
     pub const MAKE_CREDENTIALS_SAMPLE_RESPONSE: [u8; 666] =
         include!("tests/MAKE_CREDENTIALS_SAMPLE_RESPONSE,in");
