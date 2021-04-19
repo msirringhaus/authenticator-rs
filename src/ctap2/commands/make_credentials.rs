@@ -1,4 +1,29 @@
-use super::*;
+use super::{
+    Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin, Retryable,
+    StatusCode,
+};
+use crate::consts::{PARAMETER_SIZE, U2F_REGISTER, U2F_REQUEST_USER_PRESENCE};
+use crate::ctap::CollectedClientData;
+use crate::ctap::{ClientDataHash, Version};
+use crate::ctap2::attestation::{
+    AAGuid, AttestationObject, AttestationStatement, AttestationStatementFidoU2F,
+    AttestedCredentialData, AuthenticatorData, AuthenticatorDataFlags,
+};
+use crate::ctap2::commands::client_pin::{Pin, PublicKey};
+use crate::ctap2::server::{
+    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, User,
+};
+use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
+use crate::u2ftypes::U2FAPDUHeader;
+use cose::SignatureAlgorithm;
+use nom::{do_parse, named, number::complete::be_u8, tag, take};
+use serde::{
+    ser::{Error as SerError, SerializeMap},
+    Serialize, Serializer,
+};
+use serde_cbor::{self, de::from_slice, ser, Value};
+use serde_json::{value as json_value, Map};
+use std::io;
 
 #[derive(Copy, Clone, Debug, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -18,7 +43,7 @@ impl Default for MakeCredentialsOptions {
     }
 }
 
-trait UserValidation {
+pub(crate) trait UserValidation {
     fn ask_user_validation(&self) -> bool;
 }
 
@@ -158,7 +183,7 @@ impl Request<(AttestationObject, CollectedClientData)> for MakeCredentials {
 impl RequestCtap1 for MakeCredentials {
     type Output = (AttestationObject, CollectedClientData);
 
-    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {
@@ -190,11 +215,11 @@ impl RequestCtap1 for MakeCredentials {
         named!(
             parse_register<(&[u8], &[u8])>,
             do_parse!(
-                reserved: tag!(&[0x05]) >>
-                public_key: take!(65) >>
-                key_handle_len: be_u8 >>
-                key_handle: take!(key_handle_len) >>
-                (public_key, key_handle)
+                reserved: tag!(&[0x05])
+                    >> public_key: take!(65)
+                    >> key_handle_len: be_u8
+                    >> key_handle: take!(key_handle_len)
+                    >> (public_key, key_handle)
             )
         );
 
@@ -210,7 +235,7 @@ impl RequestCtap1 for MakeCredentials {
             .map_err(|e| {
                 error!("error while parsing cert = {:?}", e);
                 let err = io::Error::new(io::ErrorKind::Other, "Failed to parse x509 certificate");
-                let err = error::Error::from(err);
+                let err = serde_cbor::Error::from(err);
                 let err = Error::Parsing(err);
                 let err = TransportError::Command(err);
                 Retryable::Error(err)
@@ -229,7 +254,7 @@ impl RequestCtap1 for MakeCredentials {
                 // see This is the (uncompressed) x,y-representation of a curve point on the P-256 NIST elliptic curve.
                 // https://fidoalliance.org/specs/fido-u2f-v1.2-ps-20170411/fido-u2f-raw-message-formats-v1.2-ps-20170411.html
                 credential_public_key: PublicKey::new(
-                    EllipticCurve::P256,
+                    SignatureAlgorithm::PS256,
                     Vec::from(&public_key[..]),
                 ),
             }),
@@ -255,7 +280,7 @@ impl RequestCtap2 for MakeCredentials {
         Command::MakeCredentials
     }
 
-    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {

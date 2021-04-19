@@ -2,25 +2,22 @@ use super::{
     Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin, Retryable,
     StatusCode,
 };
+use crate::consts::{
+    PARAMETER_SIZE, U2F_AUTHENTICATE, U2F_CHECK_IS_REGISTERED, U2F_REQUEST_USER_PRESENCE,
+};
 use crate::ctap::CollectedClientData;
+use crate::ctap::{ClientDataHash, Version};
+use crate::ctap2::attestation::{AuthenticatorData, AuthenticatorDataFlags};
 use crate::ctap2::commands::client_pin::Pin;
 use crate::ctap2::commands::get_next_assertion::GetNextAssertion;
+use crate::ctap2::commands::make_credentials::{MakeCredentialsOptions, UserValidation};
+use crate::ctap2::server::{PublicKeyCredentialDescriptor, RelyingParty, User};
+use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
+use crate::u2ftypes::U2FAPDUHeader;
 use nom::{
     do_parse, named,
     number::complete::{be_u32, be_u8},
 };
-use std::fmt;
-use std::io;
-// use crate::ctap2::commands::make_credentrials::MakeCredentialsOptions;
-use crate::consts::{
-    PARAMETER_SIZE, U2F_AUTHENTICATE, U2F_CHECK_IS_REGISTERED, U2F_REGISTER,
-    U2F_REQUEST_USER_PRESENCE, U2F_VERSION,
-};
-use crate::ctap::{ClientDataHash, Version};
-use crate::ctap2::attestation::{AuthenticatorData, AuthenticatorDataFlags};
-use crate::ctap2::server::{PublicKeyCredentialDescriptor, RelyingParty, User};
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
-use crate::u2ftypes::U2FAPDUHeader;
 use serde::{
     de::{Error as DesError, MapAccess, Visitor},
     ser::{Error as SerError, SerializeMap},
@@ -29,6 +26,8 @@ use serde::{
 use serde_bytes::ByteBuf;
 use serde_cbor::{de::from_slice, ser, Value};
 use serde_json::{value as json_value, Map};
+use std::fmt;
+use std::io;
 
 #[derive(Debug)]
 pub struct GetAssertion {
