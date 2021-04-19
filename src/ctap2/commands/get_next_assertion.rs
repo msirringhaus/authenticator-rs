@@ -1,7 +1,10 @@
-use super::*; 
+use super::{Command, RequestCtap2, Error, StatusCode};
+use crate::transport::{Error as TransportError, FidoDevice};
+use serde_cbor::{Value, de::from_slice};
+use crate::ctap2::commands::get_assertion::GetAssertionResponse;
 
 #[derive(Debug)]
-struct GetNextAssertion;
+pub(crate) struct GetNextAssertion;
 
 impl RequestCtap2 for GetNextAssertion {
     type Output = GetAssertionResponse;
@@ -10,7 +13,7 @@ impl RequestCtap2 for GetNextAssertion {
         Command::GetNextAssertion
     }
 
-    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {

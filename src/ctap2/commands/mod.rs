@@ -17,8 +17,10 @@ use get_info::GetInfo;
 pub mod client_pin;
 use client_pin::{Pin, PinAuth, PinError, GetKeyAgreement, GetPinToken};
 
-// pub mod get_assertion;
 pub mod get_version;
+pub mod get_assertion;
+pub mod get_next_assertion;
+
 
 #[derive(Debug)]
 pub enum NSSError {

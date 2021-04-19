@@ -1,4 +1,34 @@
-use super::*; 
+use super::{
+    Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin, Retryable,
+    StatusCode,
+};
+use crate::ctap::CollectedClientData;
+use crate::ctap2::commands::client_pin::Pin;
+use crate::ctap2::commands::get_next_assertion::GetNextAssertion;
+use nom::{
+    do_parse, named,
+    number::complete::{be_u32, be_u8},
+};
+use std::fmt;
+use std::io;
+// use crate::ctap2::commands::make_credentrials::MakeCredentialsOptions;
+use crate::consts::{
+    PARAMETER_SIZE, U2F_AUTHENTICATE, U2F_CHECK_IS_REGISTERED, U2F_REGISTER,
+    U2F_REQUEST_USER_PRESENCE, U2F_VERSION,
+};
+use crate::ctap::{ClientDataHash, Version};
+use crate::ctap2::attestation::{AuthenticatorData, AuthenticatorDataFlags};
+use crate::ctap2::server::{PublicKeyCredentialDescriptor, RelyingParty, User};
+use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
+use crate::u2ftypes::U2FAPDUHeader;
+use serde::{
+    de::{Error as DesError, MapAccess, Visitor},
+    ser::{Error as SerError, SerializeMap},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
+use serde_bytes::ByteBuf;
+use serde_cbor::{de::from_slice, ser, Value};
+use serde_json::{value as json_value, Map};
 
 #[derive(Debug)]
 pub struct GetAssertion {
@@ -113,7 +143,7 @@ impl Request<AssertionObject> for GetAssertion {
 impl RequestCtap1 for GetAssertion {
     type Output = AssertionObject;
 
-    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {
@@ -131,7 +161,7 @@ impl RequestCtap1 for GetAssertion {
         impl<'assertion> RequestCtap1 for GetAssertionCheck<'assertion> {
             type Output = ();
 
-            fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+            fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
             where
                 Dev: FidoDevice,
             {
@@ -178,7 +208,7 @@ impl RequestCtap1 for GetAssertion {
                     _ => None,
                 }
             })
-            .ok_or(transport::Error::DeviceNotSupported)?;
+            .ok_or(TransportError::DeviceNotSupported)?;
 
         debug!("sending key_handle = {:?}", key_handle);
 
@@ -231,7 +261,7 @@ impl RequestCtap1 for GetAssertion {
                 ))
                 .map_err(|e| TransportError::IO(None, e))
                 .map_err(Retryable::Error)
-            },
+            }
         }?;
 
         let mut flags = AuthenticatorDataFlags::empty();
@@ -263,7 +293,7 @@ impl RequestCtap2 for GetAssertion {
         Command::GetAssertion
     }
 
-    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, transport::Error>
+    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {
@@ -323,7 +353,6 @@ impl RequestWithPin for GetAssertion {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Assertion {
     credentials: Option<serde_cbor::Value>,
@@ -357,7 +386,7 @@ impl AssertionObject {
     }
 }
 
-struct GetAssertionResponse {
+pub(crate) struct GetAssertionResponse {
     credentials: Option<serde_cbor::Value>,
     auth_data: AuthenticatorData,
     signature: Vec<u8>,
@@ -393,33 +422,33 @@ impl<'de> Deserialize<'de> for GetAssertionResponse {
                     match key {
                         1 => {
                             if credentials.is_some() {
-                                return Err(de::Error::duplicate_field("credentials"));
+                                return Err(M::Error::duplicate_field("credentials"));
                             }
                             credentials = Some(map.next_value()?);
                         }
                         2 => {
                             if auth_data.is_some() {
-                                return Err(de::Error::duplicate_field("auth_data"));
+                                return Err(M::Error::duplicate_field("auth_data"));
                             }
                             auth_data = Some(map.next_value()?);
                         }
                         3 => {
                             if signature.is_some() {
-                                return Err(de::Error::duplicate_field("signature"));
+                                return Err(M::Error::duplicate_field("signature"));
                             }
                             let signature_bytes: ByteBuf = map.next_value()?;
-                            let signature_bytes: Vec<u8> = signature_bytes.into();
+                            let signature_bytes: Vec<u8> = signature_bytes.into_vec();
                             signature = Some(signature_bytes);
                         }
                         4 => {
                             if public_key.is_some() {
-                                return Err(de::Error::duplicate_field("public_key"));
+                                return Err(M::Error::duplicate_field("public_key"));
                             }
                             public_key = map.next_value()?;
                         }
                         5 => {
                             if number_of_credentials.is_some() {
-                                return Err(de::Error::duplicate_field("number_of_credentials"));
+                                return Err(M::Error::duplicate_field("number_of_credentials"));
                             }
                             number_of_credentials = Some(map.next_value()?);
                         }
@@ -427,8 +456,8 @@ impl<'de> Deserialize<'de> for GetAssertionResponse {
                     }
                 }
 
-                let auth_data = auth_data.ok_or(de::Error::missing_field("auth_data"))?;
-                let signature = signature.ok_or(de::Error::missing_field("signature"))?;
+                let auth_data = auth_data.ok_or(M::Error::missing_field("auth_data"))?;
+                let signature = signature.ok_or(M::Error::missing_field("signature"))?;
 
                 Ok(GetAssertionResponse {
                     credentials,
