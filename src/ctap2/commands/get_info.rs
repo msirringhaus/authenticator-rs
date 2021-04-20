@@ -1,9 +1,12 @@
-use super::{RequestCtap2, Error, Command, StatusCode}; 
-use std::fmt;
-use serde::{Deserialize, Deserializer, Serialize, de::{Error as SError, Visitor, MapAccess}};
+use super::{Command, Error, RequestCtap2, StatusCode};
+use crate::transport::{Error as TransportError, FidoDevice};
+use serde::{
+    de::{Error as SError, MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 use serde_cbor::de::from_slice;
 use serde_cbor::Value;
-use crate::transport::{Error as TransportError, FidoDevice};
+use std::fmt;
 
 #[derive(Serialize, PartialEq, Eq, Clone)]
 pub struct AAGuid(pub [u8; 16]);
@@ -99,7 +102,7 @@ impl RequestCtap2 for GetInfo {
         Command::GetInfo
     }
 
-    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn wire_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {
@@ -122,9 +125,7 @@ impl RequestCtap2 for GetInfo {
         debug!("response status code: {:?}", status);
         if input.len() > 1 {
             if status.is_ok() {
-                trace!(
-                    "parsing authenticator info data: {:#04X?}", &input[1..]
-                );
+                trace!("parsing authenticator info data: {:#04X?}", &input[1..]);
                 let authenticator_info = from_slice(&input[1..]).map_err(Error::Parsing)?;
                 Ok(authenticator_info)
             } else {

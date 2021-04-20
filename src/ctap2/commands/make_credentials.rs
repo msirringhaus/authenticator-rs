@@ -5,27 +5,24 @@ use super::{
 use crate::consts::{PARAMETER_SIZE, U2F_REGISTER, U2F_REQUEST_USER_PRESENCE};
 use crate::ctap::CollectedClientData;
 use crate::ctap::{ClientDataHash, Version};
-use crate::ctap2::attestation::{
-    AAGuid, AttestationObject, AttestationStatement, AttestationStatementFidoU2F,
-    AttestedCredentialData, AuthenticatorData, AuthenticatorDataFlags,
-};
-use crate::ctap2::commands::client_pin::{Pin, PublicKey};
+use crate::ctap2::attestation::AttestationObject;
+use crate::ctap2::commands::client_pin::{Pin};
 use crate::ctap2::server::{
     PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, User,
 };
 use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
 use crate::u2ftypes::U2FAPDUHeader;
-use cose::SignatureAlgorithm;
-use nom::{do_parse, named, number::complete::be_u8, tag, take};
+
+
 use serde::{
     ser::{Error as SerError, SerializeMap},
     Serialize, Serializer,
 };
 #[cfg(test)]
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize};
 use serde_cbor::{self, de::from_slice, ser, Value};
 use serde_json::{value as json_value, Map};
-use std::io;
+
 
 #[derive(Copy, Clone, Debug, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -100,11 +97,12 @@ impl MakeCredentials {
             pin,
         }
     }
-    
-    pub(crate) fn handle_response<Dev: FidoDevice>(&self,
+
+    pub(crate) fn handle_response<Dev: FidoDevice>(
+        &self,
         dev: &mut Dev,
-        input: &[u8]) 
-        -> Result<(AttestationObject, CollectedClientData), TransportError> {
+        input: &[u8],
+    ) -> Result<(AttestationObject, CollectedClientData), TransportError> {
         if self.user.is_none() {
             // CTAP 1
             unimplemented!();
@@ -221,12 +219,12 @@ impl RequestCtap1 for MakeCredentials {
     fn handle_response_ctap1(
         &self,
         status: Result<(), ApduErrorStatus>,
-        input: &[u8],
+        _input: &[u8],
     ) -> Result<Self::Output, Retryable<TransportError>> {
         if Err(ApduErrorStatus::ConditionsNotSatisfied) == status {
             return Err(Retryable::Retry);
         }
-/*
+        /*
         named!(
             parse_register<(&[u8], &[u8])>,
             do_parse!(

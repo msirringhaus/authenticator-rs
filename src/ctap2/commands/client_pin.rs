@@ -1,14 +1,18 @@
-use super::*; 
-use std::fmt;
-use serde::{Serialize, Serializer, Deserialize, Deserializer, de::{Error as SerdeError, Visitor, MapAccess}, ser::SerializeMap};
-use sha2::{Sha256, Digest};
-use serde_bytes::{ByteBuf};
-use cose::SignatureAlgorithm;
 use super::get_info::AuthenticatorInfo;
+use super::*;
+use crate::ctap::ClientDataHash;
+use cose::SignatureAlgorithm;
+use serde::{
+    de::{Error as SerdeError, MapAccess, Visitor},
+    ser::SerializeMap,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
+use serde_bytes::ByteBuf;
 use serde_cbor::de::from_slice;
 use serde_cbor::ser::to_vec;
+use sha2::{Digest, Sha256};
 use std::convert::TryFrom;
-use crate::ctap::ClientDataHash;
+use std::fmt;
 
 // use serde::Deserialize; cfg[test]
 
@@ -21,21 +25,21 @@ pub struct PublicKey {
 impl PublicKey {
     fn affine_coordinates(&self) -> Result<(ByteBuf, ByteBuf), Error> {
         unimplemented!();
-/*
-        let name = self.curve.to_openssl_name();
-        let group = EcGroup::from_curve_name(name)?;
+        /*
+                let name = self.curve.to_openssl_name();
+                let group = EcGroup::from_curve_name(name)?;
 
-        let mut ctx = BigNumContext::new().unwrap();
-        let point = EcPoint::from_bytes(&group, &self.bytes[..], &mut ctx).unwrap();
+                let mut ctx = BigNumContext::new().unwrap();
+                let point = EcPoint::from_bytes(&group, &self.bytes[..], &mut ctx).unwrap();
 
-        let mut x = BigNum::new()?;
-        let mut y = BigNum::new()?;
+                let mut x = BigNum::new()?;
+                let mut y = BigNum::new()?;
 
-        point.affine_coordinates_gfp(&group, &mut x, &mut y, &mut ctx)?;
-        //point.affine_coordinates_gf2m(&group, &mut x, &mut y, &mut ctx)?;
+                point.affine_coordinates_gfp(&group, &mut x, &mut y, &mut ctx)?;
+                //point.affine_coordinates_gf2m(&group, &mut x, &mut y, &mut ctx)?;
 
-        Ok((x.to_vec().into(), y.to_vec().into()))
-*/
+                Ok((x.to_vec().into(), y.to_vec().into()))
+        */
     }
 
     pub fn new(curve: SignatureAlgorithm, bytes: Vec<u8>) -> Self {
@@ -82,11 +86,10 @@ impl<'de> Deserialize<'de> for PublicKey {
                             if curve.is_some() {
                                 return Err(SerdeError::duplicate_field("curve"));
                             }
-                            let value : u64 = map.next_value()?;
-                            let val = SignatureAlgorithm::try_from(value).map_err(|_| SerdeError::custom(format!(
-                                    "unsupported curve {}",
-                                    value
-                                )))?;
+                            let value: u64 = map.next_value()?;
+                            let val = SignatureAlgorithm::try_from(value).map_err(|_| {
+                                SerdeError::custom(format!("unsupported curve {}", value))
+                            })?;
                             curve = Some(val);
                         }
                         -2 => {
@@ -118,14 +121,14 @@ impl<'de> Deserialize<'de> for PublicKey {
                     };
                 }
 
-                if let Some(curve) = curve {
-                    if let Some(x) = x {
-                        if let Some(y) = y {
+                if let Some(_curve) = curve {
+                    if let Some(_x) = x {
+                        if let Some(_y) = y {
                             unimplemented!();
-//                             let pub_key = curve.affine_to_key(&x[..], &y[..]).map_err(|e| {
-//                                 SerdeError::custom(format!("nss error: {:?}", e))
-//                             })?;
-//                             Ok(pub_key)
+                        //                             let pub_key = curve.affine_to_key(&x[..], &y[..]).map_err(|e| {
+                        //                                 SerdeError::custom(format!("nss error: {:?}", e))
+                        //                             })?;
+                        //                             Ok(pub_key)
                         } else {
                             Err(SerdeError::custom("missing required field: y"))
                         }
@@ -183,8 +186,8 @@ impl ECDHSecret {
     pub fn shared_secret(&self) -> &[u8] {
         self.shared_secret.as_ref()
     }
-    
-    pub fn encrypt(&self, input: &[u8], iv: &[u8]) -> Result<Vec<u8>, Error> {
+
+    pub fn encrypt(&self, _input: &[u8], _iv: &[u8]) -> Result<Vec<u8>, Error> {
         unimplemented!();
         /*let cipher = Cipher::aes_256_cbc();
 
@@ -201,7 +204,7 @@ impl ECDHSecret {
         Ok(output)*/
     }
 
-    pub fn decrypt(&self, input: &[u8], iv: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn decrypt(&self, _input: &[u8], _iv: &[u8]) -> Result<Vec<u8>, Error> {
         unimplemented!();
         /*let cipher = Cipher::aes_256_cbc();
 
@@ -230,7 +233,6 @@ impl fmt::Debug for ECDHSecret {
         )
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
@@ -489,7 +491,7 @@ where
         Command::ClientPin
     }
 
-    fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn wire_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
         Dev: FidoDevice,
     {
@@ -537,10 +539,10 @@ pub struct KeyAgreement(PublicKey);
 impl KeyAgreement {
     pub fn shared_secret(&self) -> Result<ECDHSecret, Error> {
         unimplemented!();
-//         self.0
-//             .complete_handshake()
-//             .map_err(|_| Error::ECDH)
-//             .map(ECDHSecret)
+        //         self.0
+        //             .complete_handshake()
+        //             .map_err(|_| Error::ECDH)
+        //             .map(ECDHSecret)
     }
 }
 
@@ -599,7 +601,7 @@ impl AsRef<[u8]> for EncryptedPinToken {
 pub struct PinToken(Vec<u8>);
 
 impl PinToken {
-    pub fn auth(&self, client_hash_data: &ClientDataHash) -> Result<PinAuth, PinError> {
+    pub fn auth(&self, _client_hash_data: &ClientDataHash) -> Result<PinAuth, PinError> {
         if self.0.len() < 4 {
             return Err(PinError::PinIsTooShort);
         }
@@ -608,7 +610,7 @@ impl PinToken {
         if bytes.len() > 64 {
             return Err(PinError::PinIsTooLong(bytes.len()));
         }
-        
+
         unimplemented!();
         /*let mut mac =
             Hmac::<Sha256>::new_varkey(self.as_ref()).map_err(|_| PinError::InvalidKeyLen)?;
@@ -670,7 +672,6 @@ impl Pin {
         PinAuth(output)
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 pub enum PinError {

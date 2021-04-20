@@ -1,4 +1,3 @@
-use cose;
 use serde_cbor::{error, Value};
 use serde_json::{self as json};
 use std::error::Error as StdErrorT;
@@ -470,7 +469,7 @@ impl From<NSSError> for Error {
 pub mod test {
     use serde_cbor::de::from_slice;
 
-    use super::{get_info::AuthenticatorInfo, Request};
+    use super::{get_info::AuthenticatorInfo};
     use crate::ctap::{CollectedClientData, Origin, WebauthnType};
     use crate::ctap2::commands::make_credentials::MakeCredentials;
     use crate::ctap2::server::{

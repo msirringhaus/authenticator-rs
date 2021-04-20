@@ -1,4 +1,4 @@
-pub mod commands;
 pub mod attestation;
-pub mod utils;
+pub mod commands;
 pub mod server;
+pub mod utils;

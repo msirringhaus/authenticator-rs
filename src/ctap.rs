@@ -2,8 +2,8 @@ use std::fmt;
 
 #[cfg(test)]
 use serde::de::{self, Deserialize, Deserializer, Visitor};
-use serde::{Serialize, Serializer};
 use serde::ser::{Error, SerializeMap};
+use serde::{Serialize, Serializer};
 use serde_json as json;
 use sha2::{Digest, Sha256};
 
@@ -239,9 +239,9 @@ impl CollectedClientData {
 #[cfg(test)]
 mod test {
     use super::{Challenge, CollectedClientData, Origin, TokenBinding, WebauthnType};
-    use serde_json as json;
     use hex_literal::*;
-    
+    use serde_json as json;
+
     #[test]
     fn test_token_binding_status() {
         let tok = TokenBinding::Present(vec![0x00, 0x01, 0x02, 0x03]);

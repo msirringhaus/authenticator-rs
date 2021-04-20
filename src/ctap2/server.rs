@@ -7,7 +7,11 @@ use serde_cbor::ser;
 
 #[cfg(test)]
 use serde::de::MapAccess;
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de::{Error as SerdeError, Unexpected, Visitor}, ser::SerializeMap};
+use serde::{
+    de::{Error as SerdeError, Unexpected, Visitor},
+    ser::SerializeMap,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 use sha2::{Digest, Sha256};
 

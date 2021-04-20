@@ -1,13 +1,23 @@
 use std::fmt;
 #[cfg(test)]
-use std::io::{self, Write, Cursor};
+use std::io::{self, Write};
 
 #[cfg(test)]
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::{number::complete::{be_u16, be_u32, be_u8}, Err as NomErr, IResult, named, do_parse, map_res, map, take, cond};
-use serde::{Deserialize, Deserializer, Serialize, de::{Error as SerdeError, MapAccess, Visitor}};
+use nom::{
+    cond, do_parse, map, map_res, named,
+    number::complete::{be_u16, be_u32, be_u8},
+    take, Err as NomErr, IResult,
+};
+use serde::{
+    de::{Error as SerdeError, MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 #[cfg(test)]
-use serde::{Serializer, ser::{SerializeMap, Error as SerError}};
+use serde::{
+    ser::{Error as SerError, SerializeMap},
+    Serializer,
+};
 
 use serde_bytes::ByteBuf;
 
@@ -139,10 +149,11 @@ fn serde_to_nom<'a, Output>(input: &'a [u8]) -> IResult<&'a [u8], Output>
 where
     Output: Deserialize<'a>,
 {
-    from_slice_stream(input).map_err(|e| nom::Err::Error(nom::error::make_error(input, nom::error::ErrorKind::NoneOf)))
-        // can't use custom errorkind because of error type mismatch in parse_attested_cred_data
-        //.map_err(|e| NomErr::Error(Context::Code(input, ErrorKind::Custom(e))))
-//         .map_err(|_| NomErr::Error(Context::Code(input, ErrorKind::Custom(42))))
+    from_slice_stream(input)
+        .map_err(|_e| nom::Err::Error(nom::error::make_error(input, nom::error::ErrorKind::NoneOf)))
+    // can't use custom errorkind because of error type mismatch in parse_attested_cred_data
+    //.map_err(|e| NomErr::Error(Context::Code(input, ErrorKind::Custom(e))))
+    //         .map_err(|_| NomErr::Error(Context::Code(input, ErrorKind::Custom(42))))
 }
 
 named!(
@@ -449,7 +460,7 @@ impl<'de> Deserialize<'de> for AttestationObject {
                             auth_data = Some(map.next_value()?);
                         }
                         3 => {
-                            let format = format.as_ref().ok_or(SerdeError::missing_field("fmt"))?;
+                            let format = format.as_ref().ok_or_else(|| SerdeError::missing_field("fmt"))?;
                             if att_statement.is_some() {
                                 return Err(SerdeError::duplicate_field("att_statement"));
                             }

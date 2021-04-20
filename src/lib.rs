@@ -77,9 +77,9 @@ pub mod errors;
 pub mod statecallback;
 mod virtualdevices;
 
-mod transport;
 mod ctap;
 mod ctap2;
+mod transport;
 
 // Keep this in sync with the constants in u2fhid-capi.h.
 bitflags! {

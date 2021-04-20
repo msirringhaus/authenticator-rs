@@ -183,7 +183,7 @@ impl RequestCtap1 for GetAssertion {
             fn handle_response_ctap1(
                 &self,
                 status: Result<(), ApduErrorStatus>,
-                input: &[u8],
+                _input: &[u8],
             ) -> Result<Self::Output, Retryable<TransportError>> {
                 match status {
                     Err(ref status) if status.is_conditions_not_satisfied() => Ok(()),
@@ -455,8 +455,8 @@ impl<'de> Deserialize<'de> for GetAssertionResponse {
                     }
                 }
 
-                let auth_data = auth_data.ok_or(M::Error::missing_field("auth_data"))?;
-                let signature = signature.ok_or(M::Error::missing_field("signature"))?;
+                let auth_data = auth_data.ok_or_else(|| M::Error::missing_field("auth_data"))?;
+                let signature = signature.ok_or_else(|| M::Error::missing_field("signature"))?;
 
                 Ok(GetAssertionResponse {
                     credentials,
