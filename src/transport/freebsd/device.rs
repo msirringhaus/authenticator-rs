@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::os::unix::prelude::*;
 
 use crate::consts::{CID_BROADCAST, MAX_HID_RPT_SIZE};
-use crate::platform::uhid;
+use crate::transport::platformuhid;
 use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
 use crate::util::from_unix_result;
 

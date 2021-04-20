@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::os::unix::prelude::*;
 
 use crate::consts::CID_BROADCAST;
-use crate::platform::{hidraw, monitor};
+use crate::transport::platform::{hidraw, monitor};
 use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
 use crate::util::from_unix_result;
 

@@ -476,8 +476,7 @@ pub mod test {
         Alg, PublicKeyCredentialParameters, RelyingParty, RelyingPartyData, User,
     };
     //     use crate::transport::hid::HIDDevice;
-    //     use crate::transport::platform::device::Device;
-    use crate::platform::device::Device;
+    use crate::transport::platform::device::Device;
     //     use crate::transport::platform::TestCase;
 
     pub const MAKE_CREDENTIALS_SAMPLE_RESPONSE: [u8; 666] =
