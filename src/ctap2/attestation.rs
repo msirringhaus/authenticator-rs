@@ -1,13 +1,13 @@
 use std::fmt;
 #[cfg(test)]
-use std::io::{self, Write};
+use std::io::{self, Write, Cursor};
 
 #[cfg(test)]
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::{number::complete::{be_u16, be_u32, be_u8}, Err as NomErr, IResult, named, do_parse, map_res, map, take, cond};
 use serde::{Deserialize, Deserializer, Serialize, de::{Error as SerdeError, MapAccess, Visitor}};
 #[cfg(test)]
-use serde::{Serializer, ser::SerializeMap};
+use serde::{Serializer, ser::{SerializeMap, Error as SerError}};
 
 use serde_bytes::ByteBuf;
 
@@ -242,11 +242,11 @@ impl Serialize for AuthenticatorData {
     {
         let mut data = io::Cursor::new(Vec::new());
         data.write_all(&self.rp_id_hash.0)
-            .map_err(|e| SerdeError::custom(format!("io error: {:?}", e)))?;
+            .map_err(|e| S::Error::custom(format!("io error: {:?}", e)))?;
         data.write_all(&[self.flags.bits()])
-            .map_err(|e| SerdeError::custom(format!("io error: {:?}", e)))?;
+            .map_err(|e| S::Error::custom(format!("io error: {:?}", e)))?;
         data.write_u32::<BigEndian>(self.counter)
-            .map_err(|e| SerdeError::custom(format!("io error: {:?}", e)))?;
+            .map_err(|e| S::Error::custom(format!("io error: {:?}", e)))?;
 
         // TODO(baloo): need to yield credential_data and extensions, but that dependends on flags,
         //              should we consider another type system?

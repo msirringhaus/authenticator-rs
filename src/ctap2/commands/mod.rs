@@ -1,27 +1,22 @@
-/*use std::default::Default;
-use std::ffi::CString;
-use std::io::{self, Read};
-*/
-use std::fmt;
-use std::error::Error as StdErrorT;
+use cose;
 use serde_cbor::{error, Value};
 use serde_json::{self as json};
-use cose;
+use std::error::Error as StdErrorT;
+use std::fmt;
 
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
 use crate::ctap::{ClientDataHash, Version};
+use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
 
 pub mod get_info;
 use get_info::GetInfo;
 
 pub mod client_pin;
-use client_pin::{Pin, PinAuth, PinError, GetKeyAgreement, GetPinToken};
+use client_pin::{GetKeyAgreement, GetPinToken, Pin, PinAuth, PinError};
 
-pub mod get_version;
 pub mod get_assertion;
 pub mod get_next_assertion;
+pub mod get_version;
 pub mod make_credentials;
-
 
 #[derive(Debug)]
 pub enum NSSError {
@@ -34,45 +29,6 @@ pub enum NSSError {
     ExtractPublicKeyFailed,
 }
 
-/*
-use pretty_hex::pretty_hex;
-
-use cose::agreement::{self, Agreement};
-use cose::{EllipticCurve, PublicKey};
-use hmac::{Hmac, Mac};
-use nom::{be_u32, be_u8};
-use serde::de::{self, Deserialize, Deserializer, Error as SerdeError, MapAccess, Visitor};
-use serde::ser::{Error as ErrorT, Serialize, SerializeMap, Serializer};
-use serde_bytes::ByteBuf;
-use serde_cbor::de::from_slice;
-use serde_cbor::ser::{self, to_vec};
-use serde_cbor::Value;
-use serde_json::value as json_value;
-use serde_json::{self as json, Map};
-use sha2::{Digest, Sha256};
-
-use openssl::error::ErrorStack;
-use openssl::symm::{Cipher, Crypter, Mode};
-
-use crate::transport::{self, ApduErrorStatus, Error as TransportError, FidoDevice};
-
-use crate::ctap2::attestation::{
-    AAGuid, AttestationObject, AttestationStatement, AttestationStatementFidoU2F,
-    AttestedCredentialData, AuthenticatorData, AuthenticatorDataFlags,
-};
-
-use crate::ctap2::server::{
-    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, User,
-};
-
-use crate::ctap::{ClientDataHash, CollectedClientData, Version};
-
-use crate::consts::{
-    PARAMETER_SIZE, U2F_AUTHENTICATE, U2F_CHECK_IS_REGISTERED, U2F_REGISTER,
-    U2F_REQUEST_USER_PRESENCE, U2F_VERSION,
-};
-use crate::u2ftypes::U2FAPDUHeader;
-*/
 pub(crate) trait Request<T>
 where
     Self: fmt::Debug,
@@ -520,10 +476,10 @@ pub mod test {
     use crate::ctap2::server::{
         Alg, PublicKeyCredentialParameters, RelyingParty, RelyingPartyData, User,
     };
-//     use crate::transport::hid::HIDDevice;
-//     use crate::transport::platform::device::Device;
+    //     use crate::transport::hid::HIDDevice;
+    //     use crate::transport::platform::device::Device;
     use crate::platform::device::Device;
-//     use crate::transport::platform::TestCase;
+    //     use crate::transport::platform::TestCase;
 
     pub const MAKE_CREDENTIALS_SAMPLE_RESPONSE: [u8; 666] =
         include!("tests/MAKE_CREDENTIALS_SAMPLE_RESPONSE,in");

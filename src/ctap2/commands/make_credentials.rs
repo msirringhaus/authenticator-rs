@@ -21,6 +21,8 @@ use serde::{
     ser::{Error as SerError, SerializeMap},
     Serialize, Serializer,
 };
+#[cfg(test)]
+use serde::{Deserialize, Deserializer};
 use serde_cbor::{self, de::from_slice, ser, Value};
 use serde_json::{value as json_value, Map};
 use std::io;
@@ -96,6 +98,19 @@ impl MakeCredentials {
             extensions: Map::new(),
             options,
             pin,
+        }
+    }
+    
+    pub(crate) fn handle_response<Dev: FidoDevice>(&self,
+        dev: &mut Dev,
+        input: &[u8]) 
+        -> Result<(AttestationObject, CollectedClientData), TransportError> {
+        if self.user.is_none() {
+            // CTAP 1
+            unimplemented!();
+        } else {
+            // CTAP 2
+            self.handle_response_ctap2(dev, input)
         }
     }
 }
@@ -211,7 +226,7 @@ impl RequestCtap1 for MakeCredentials {
         if Err(ApduErrorStatus::ConditionsNotSatisfied) == status {
             return Err(Retryable::Retry);
         }
-
+/*
         named!(
             parse_register<(&[u8], &[u8])>,
             do_parse!(
@@ -231,7 +246,7 @@ impl RequestCtap1 for MakeCredentials {
             .map_err(|e| TransportError::IO(None, e))
             .map_err(Retryable::Error)?;
 
-        let (signature, cert) = der_parser::parse_der(rest)
+        let (signature, cert) = der_parser::parse_der(rest) // TODO(MS): See if this can be done without an external crate
             .map_err(|e| {
                 error!("error while parsing cert = {:?}", e);
                 let err = io::Error::new(io::ErrorKind::Other, "Failed to parse x509 certificate");
@@ -270,6 +285,8 @@ impl RequestCtap1 for MakeCredentials {
         let client_data = self.client_data.clone();
 
         Ok((attestation_object, client_data))
+        */
+        unimplemented!();
     }
 }
 

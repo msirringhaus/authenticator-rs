@@ -1,7 +1,9 @@
+use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::path;
 use crate::ctap2::commands::{Error as CommandError, RequestCtap1, RequestCtap2, get_info::AuthenticatorInfo, client_pin::ECDHSecret};
+use crate::consts::{SW_CONDITIONS_NOT_SATISFIED, SW_NO_ERROR, SW_WRONG_DATA, SW_WRONG_LENGTH};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ApduErrorStatus {
@@ -9,6 +11,46 @@ pub enum ApduErrorStatus {
     WrongData,
     WrongLength,
     Unknown([u8; 2]),
+}
+
+impl ApduErrorStatus {
+    pub fn from(status: [u8; 2]) -> Result<(), ApduErrorStatus> {
+        match status {
+            s if s == SW_NO_ERROR => Ok(()),
+            s if s == SW_CONDITIONS_NOT_SATISFIED => Err(ApduErrorStatus::ConditionsNotSatisfied),
+            s if s == SW_WRONG_DATA => Err(ApduErrorStatus::WrongData),
+            s if s == SW_WRONG_LENGTH => Err(ApduErrorStatus::WrongLength),
+            other => Err(ApduErrorStatus::Unknown(other)),
+        }
+    }
+
+    pub fn is_conditions_not_satisfied(&self) -> bool {
+        match *self {
+            ApduErrorStatus::ConditionsNotSatisfied => true,
+            _ => false,
+        }
+    }
+}
+impl fmt::Display for ApduErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ApduErrorStatus::ConditionsNotSatisfied => write!(f, "Apdu: condition not satisfied"),
+            ApduErrorStatus::WrongData => write!(f, "Apdu: wrong data"),
+            ApduErrorStatus::WrongLength => write!(f, "Apdu: wrong length"),
+            ApduErrorStatus::Unknown(ref u) => write!(f, "Apdu: unknown error: {:?}", u),
+        }
+    }
+}
+
+impl StdError for ApduErrorStatus {
+    fn description(&self) -> &str {
+        match *self {
+            ApduErrorStatus::ConditionsNotSatisfied => "Apdu: condition not satisfied",
+            ApduErrorStatus::WrongData => "Apdu: wrong data",
+            ApduErrorStatus::WrongLength => "Apdu: wrong length",
+            ApduErrorStatus::Unknown(_) => "Apdu: unknown error",
+        }
+    }
 }
 
 
@@ -19,7 +61,7 @@ pub enum Error {
     UnexpectedInitReplyLen,
     NonceMismatch,
     DeviceNotInitialized,
-    #[cfg(not(test))]
+//     #[cfg(not(test))]
     DeviceNotSupported,
     UnsupportedCommand,
     IO(Option<path::PathBuf>, io::Error),
