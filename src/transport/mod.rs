@@ -8,31 +8,41 @@ use std::fmt;
 use std::io;
 use std::path;
 
-#[cfg(any(target_os = "linux"))]
+pub mod hid;
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+pub mod hidproto;
+
+#[cfg(all(not(test), target_os = "linux"))]
 #[path = "linux/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_os = "freebsd"))]
+#[cfg(all(not(test), target_os = "freebsd"))]
 #[path = "freebsd/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_os = "netbsd"))]
+#[cfg(all(not(test), target_os = "netbsd"))]
 #[path = "netbsd/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_os = "openbsd"))]
+#[cfg(all(not(test), target_os = "openbsd"))]
 #[path = "openbsd/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_os = "macos"))]
+#[cfg(all(not(test), target_os = "macos"))]
 #[path = "macos/mod.rs"]
 pub mod platform;
 
-#[cfg(any(target_os = "windows"))]
+#[cfg(all(not(test), target_os = "windows"))]
 #[path = "windows/mod.rs"]
 pub mod platform;
 
+#[cfg(test)]
+#[path = "test/mod.rs"]
+pub mod platform;
+
 #[cfg(not(any(
+    test,
     target_os = "linux",
     target_os = "freebsd",
     target_os = "openbsd",
@@ -98,7 +108,6 @@ pub enum Error {
     UnexpectedInitReplyLen,
     NonceMismatch,
     DeviceNotInitialized,
-    //     #[cfg(not(test))]
     DeviceNotSupported,
     UnsupportedCommand,
     IO(Option<path::PathBuf>, io::Error),
@@ -134,7 +143,6 @@ impl fmt::Display for Error {
             Error::NonceMismatch => write!(f, "Error: Nonce mismatch"),
             Error::DeviceError => write!(f, "Error: device returned error"),
             Error::DeviceNotInitialized => write!(f, "Error: using not initiliazed device"),
-            #[cfg(not(test))]
             Error::DeviceNotSupported => {
                 write!(f, "Error: requested operation is not available on device")
             }
@@ -192,11 +200,28 @@ where
     fn initialized(&self) -> bool;
     fn initialize(&mut self);
 
-    //     fn protocol_support(&self) -> ProtocolSupport;
-    //
+    fn protocol_support(&self) -> ProtocolSupport;
+
     fn set_shared_secret(&mut self, secret: ECDHSecret);
     fn shared_secret(&self) -> Option<&ECDHSecret>;
 
     fn authenticator_info(&self) -> Option<&AuthenticatorInfo>;
     fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo);
+}
+
+bitflags! {
+    pub struct ProtocolSupport: u8 {
+        const FIDO1 = 0x01;
+        const FIDO2 = 0x02;
+    }
+}
+
+impl ProtocolSupport {
+    pub fn has_fido1(&self) -> bool {
+        self.contains(ProtocolSupport::FIDO1)
+    }
+
+    pub fn has_fido2(&self) -> bool {
+        self.contains(ProtocolSupport::FIDO2)
+    }
 }

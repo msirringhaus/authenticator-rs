@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 extern crate libc;
-
+use std::error::Error;
 use std::io;
 
 macro_rules! try_or {
@@ -64,4 +64,11 @@ pub fn from_unix_result<T: Signed>(rv: T) -> io::Result<T> {
 
 pub fn io_err(msg: &str) -> io::Error {
     io::Error::new(io::ErrorKind::Other, msg)
+}
+
+pub fn trace_hex(data: &[u8]) {
+    if log_enabled!(log::Level::Trace) {
+        let parts: Vec<String> = data.iter().map(|byte| format!("{:02x}", byte)).collect();
+        trace!("USB send: {}", parts.join(""));
+    }
 }

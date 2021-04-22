@@ -5,9 +5,6 @@
 #[macro_use]
 mod util;
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-pub mod hidproto;
-
 #[cfg(any(target_os = "linux"))]
 extern crate libudev;
 

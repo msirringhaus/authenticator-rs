@@ -460,7 +460,9 @@ impl<'de> Deserialize<'de> for AttestationObject {
                             auth_data = Some(map.next_value()?);
                         }
                         3 => {
-                            let format = format.as_ref().ok_or_else(|| SerdeError::missing_field("fmt"))?;
+                            let format = format
+                                .as_ref()
+                                .ok_or_else(|| SerdeError::missing_field("fmt"))?;
                             if att_statement.is_some() {
                                 return Err(SerdeError::duplicate_field("att_statement"));
                             }
@@ -520,6 +522,9 @@ impl Serialize for AttestationObject {
             AttestationStatement::Packed(ref v) => {
                 map.serialize_entry(&1, &"packed")?;
                 map.serialize_entry(&3, v)?;
+            }
+            AttestationStatement::FidoU2F(_) => {
+                unimplemented!();
             }
         }
 
