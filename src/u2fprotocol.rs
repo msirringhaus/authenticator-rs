@@ -257,7 +257,7 @@ where
 {
     debug!("sending {:?} to {:?}", msg, dev);
 
-    let mut data = msg.wire_format(dev)?;
+    let data = msg.wire_format(dev)?;
     let mut cbor: Vec<u8> = Vec::with_capacity(data.len() + 1);
     // CTAP2 command
     // cbor.push(cmd);
@@ -296,6 +296,8 @@ mod tests {
     use crate::consts::{Capability, HIDCmd, CID_BROADCAST, SW_NO_ERROR};
 
     mod platform {
+        use crate::ctap2::commands::client_pin::ECDHSecret;
+        use crate::ctap2::commands::get_info::AuthenticatorInfo;
         use std::io;
         use std::io::{Read, Write};
 
@@ -311,6 +313,8 @@ mod tests {
             reads: Vec<[u8; IN_HID_RPT_SIZE]>,
             writes: Vec<[u8; OUT_HID_RPT_SIZE + 1]>,
             dev_info: Option<U2FDeviceInfo>,
+            authenticator_info: Option<AuthenticatorInfo>,
+            secret: Option<ECDHSecret>,
         }
 
         impl TestDevice {
@@ -320,6 +324,8 @@ mod tests {
                     reads: vec![],
                     writes: vec![],
                     dev_info: None,
+                    authenticator_info: None,
+                    secret: None,
                 }
             }
 
@@ -400,6 +406,22 @@ mod tests {
 
             fn set_device_info(&mut self, dev_info: U2FDeviceInfo) {
                 self.dev_info = Some(dev_info);
+            }
+
+            fn get_authenticator_info(&self) -> Option<&AuthenticatorInfo> {
+                self.authenticator_info.as_ref()
+            }
+
+            fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo) {
+                self.authenticator_info = Some(authenticator_info);
+            }
+
+            fn get_shared_secret(&self) -> Option<&ECDHSecret> {
+                self.secret.as_ref()
+            }
+
+            fn set_shared_secret(&mut self, secret: ECDHSecret) {
+                self.secret = Some(secret);
             }
         }
     }

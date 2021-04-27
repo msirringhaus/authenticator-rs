@@ -1,10 +1,11 @@
 use super::{ApduFormat, Error, RequestCtap1, Retryable};
 use crate::consts::U2F_VERSION;
 use crate::transport::{ApduErrorStatus, Error as TransportError};
-use crate::u2ftypes::{U2FAPDUHeader, U2FDevice};
+use crate::u2ftypes::U2FDevice;
 use std::ffi::CString;
 use std::io;
 
+#[allow(non_camel_case_types)]
 pub enum U2FInfo {
     U2F_V2,
 }

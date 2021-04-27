@@ -10,7 +10,6 @@ use std::io;
 use super::TestCase;
 use crate::consts::{Capability, CID_BROADCAST};
 use crate::ctap2::commands::{client_pin::ECDHSecret, get_info::AuthenticatorInfo};
-use crate::transport::hid::{Cid, DeviceVersion, HIDDevice};
 use crate::transport::Error;
 use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
 
@@ -18,11 +17,10 @@ use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
 pub struct Device {
     test_case: TestCase,
     inner: Box<dyn TestDevice>,
-    initialized: bool,
-    cid: Cid,
-    u2fhid_version: u8,
-    device_version: DeviceVersion,
-    capability: Capability,
+    in_rpt_size: usize,
+    out_rpt_size: usize,
+    cid: [u8; 4],
+    device_info: U2FDeviceInfo,
     authenticator_info: Option<AuthenticatorInfo>,
     shared_secret: Option<ECDHSecret>,
 }
@@ -55,11 +53,59 @@ impl Device {
     }
 }
 
-impl HIDDevice for Device {
-    type BuildParameters = TestCase;
-    type Id = TestCase;
+/* Until everything is moved to HIDDevice */
+impl U2FDevice for Device {
+    fn get_cid(&self) -> &[u8; 4] {
+        &self.cid
+    }
 
-    fn new(test_case: TestCase) -> Result<Self, Error> {
+    fn set_cid(&mut self, cid: [u8; 4]) {
+        self.cid = cid;
+    }
+
+    fn in_rpt_size(&self) -> usize {
+        self.in_rpt_size
+    }
+
+    fn out_rpt_size(&self) -> usize {
+        self.out_rpt_size
+    }
+
+    fn get_property(&self, _prop_name: &str) -> io::Result<String> {
+        //monitor::get_property_linux(&self.ath, prop_name)
+        unimplemented!();
+    }
+
+    fn get_device_info(&self) -> U2FDeviceInfo {
+        // unwrap is okay, as dev_info must have already been set, else
+        // a programmer error
+        self.device_info.clone()
+    }
+
+    fn set_device_info(&mut self, dev_info: U2FDeviceInfo) {
+        self.device_info = dev_info;
+    }
+
+    fn get_shared_secret(&self) -> Option<&ECDHSecret> {
+        self.shared_secret.as_ref()
+    }
+    fn set_shared_secret(&mut self, secret: ECDHSecret) {
+        self.shared_secret = Some(secret)
+    }
+
+    fn get_authenticator_info(&self) -> Option<&AuthenticatorInfo> {
+        self.authenticator_info.as_ref()
+    }
+    fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo) {
+        self.authenticator_info = Some(authenticator_info)
+    }
+}
+
+impl Device {
+    // type BuildParameters = TestCase;
+    // type Id = TestCase;
+
+    pub fn new(test_case: TestCase) -> Result<Self, Error> {
         debug!("test_case={:?}", test_case);
         let inner: Box<dyn TestDevice> = match test_case {
             TestCase::WriteError => Box::new(write_error::WriteErrorDevice::default()),
@@ -69,73 +115,26 @@ impl HIDDevice for Device {
         Ok(Self {
             test_case,
             inner,
-            initialized: false,
             cid: CID_BROADCAST,
-            u2fhid_version: 0,
-            device_version: [0u8; 3],
-            capability: Capability::empty(),
+            in_rpt_size: 0,  // TODO(MS)
+            out_rpt_size: 0, // TODO(MS)
+            device_info: U2FDeviceInfo {
+                vendor_name: "Test Vendor".as_bytes().to_vec(),
+                device_name: "Test Device".as_bytes().to_vec(),
+                version_interface: 0,
+                version_major: 0,
+                version_minor: 0,
+                version_build: 0,
+                cap_flags: Capability::empty(),
+            },
             authenticator_info: None,
             shared_secret: None,
         })
     }
 
-    fn id(&self) -> Self::Id {
-        self.test_case
-    }
-
-    fn initialized(&self) -> bool {
-        self.initialized
-    }
-
-    fn initialize(&mut self) {
-        self.initialized = true;
-    }
-
-    // fn cid(&self) -> &Cid {
-    //     &self.cid
+    // fn id(&self) -> Self::Id {
+    //     self.test_case
     // }
-
-    // fn set_cid(&mut self, cid: Cid) {
-    //     self.cid = cid;
-    // }
-
-    // fn u2fhid_version(&self) -> u8 {
-    //     self.u2fhid_version
-    // }
-
-    // fn set_u2fhid_version(&mut self, version: u8) {
-    //     self.u2fhid_version = version;
-    // }
-
-    // fn device_version(&self) -> &DeviceVersion {
-    //     &self.device_version
-    // }
-
-    // fn set_device_version(&mut self, device_version: DeviceVersion) {
-    //     self.device_version = device_version;
-    // }
-
-    // fn capabilities(&self) -> Capability {
-    //     self.capability
-    // }
-
-    // fn set_capabilities(&mut self, capabilities: Capability) {
-    //     self.capability = capabilities;
-    // }
-
-    fn shared_secret(&self) -> Option<&ECDHSecret> {
-        self.shared_secret.as_ref()
-    }
-    fn set_shared_secret(&mut self, secret: ECDHSecret) {
-        self.shared_secret = Some(secret)
-    }
-
-    fn authenticator_info(&self) -> Option<&AuthenticatorInfo> {
-        self.authenticator_info.as_ref()
-    }
-    fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo) {
-        self.authenticator_info = Some(authenticator_info)
-    }
 }
 
 trait TestDevice: io::Read + io::Write + fmt::Debug {}
@@ -603,40 +602,4 @@ mod fido2simple {
     }
 
     impl TestDevice for Fido2SimpleDevice {}
-}
-
-/* Until everything is moved to HIDDevice */
-impl U2FDevice for Device {
-    fn get_cid(&self) -> &[u8; 4] {
-        &self.cid
-    }
-
-    fn set_cid(&mut self, cid: [u8; 4]) {
-        self.cid = cid;
-    }
-
-    fn in_rpt_size(&self) -> usize {
-        unimplemented!();
-    }
-
-    fn out_rpt_size(&self) -> usize {
-        unimplemented!();
-    }
-
-    fn get_property(&self, _prop_name: &str) -> io::Result<String> {
-        //monitor::get_property_linux(&self.ath, prop_name)
-        unimplemented!();
-    }
-
-    fn get_device_info(&self) -> U2FDeviceInfo {
-        // unwrap is okay, as dev_info must have already been set, else
-        // a programmer error
-        // self.dev_info.clone().unwrap()
-        unimplemented!();
-    }
-
-    fn set_device_info(&mut self, _dev_info: U2FDeviceInfo) {
-        // self.dev_info = Some(dev_info);
-        unimplemented!();
-    }
 }
