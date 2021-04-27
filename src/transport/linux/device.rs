@@ -4,15 +4,16 @@
 
 extern crate libc;
 
+use crate::consts::CID_BROADCAST;
+use crate::ctap2::commands::client_pin::ECDHSecret;
+use crate::ctap2::commands::get_info::AuthenticatorInfo;
+use crate::transport::platform::{hidraw, monitor};
+use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
+use crate::util::from_unix_result;
 use std::ffi::{CString, OsString};
 use std::io;
 use std::io::{Read, Write};
 use std::os::unix::prelude::*;
-
-use crate::consts::CID_BROADCAST;
-use crate::transport::platform::{hidraw, monitor};
-use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
-use crate::util::from_unix_result;
 
 #[derive(Debug)]
 pub struct Device {
@@ -22,6 +23,8 @@ pub struct Device {
     out_rpt_size: usize,
     cid: [u8; 4],
     dev_info: Option<U2FDeviceInfo>,
+    authenticator_info: Option<AuthenticatorInfo>,
+    secret: Option<ECDHSecret>,
 }
 
 impl Device {
@@ -37,6 +40,8 @@ impl Device {
             out_rpt_size,
             cid: CID_BROADCAST,
             dev_info: None,
+            authenticator_info: None,
+            secret: None,
         })
     }
 
@@ -108,5 +113,21 @@ impl U2FDevice for Device {
 
     fn set_device_info(&mut self, dev_info: U2FDeviceInfo) {
         self.dev_info = Some(dev_info);
+    }
+
+    fn get_authenticator_info(&self) -> Option<&AuthenticatorInfo> {
+        self.authenticator_info.as_ref()
+    }
+
+    fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo) {
+        self.authenticator_info = Some(authenticator_info);
+    }
+
+    fn get_shared_secret(&self) -> Option<&ECDHSecret> {
+        self.secret.as_ref()
+    }
+
+    fn set_shared_secret(&mut self, secret: ECDHSecret) {
+        self.secret = Some(secret);
     }
 }

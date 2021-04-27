@@ -1,6 +1,7 @@
 use super::{Command, Error, RequestCtap2, StatusCode};
 use crate::ctap2::commands::get_assertion::GetAssertionResponse;
-use crate::transport::{Error as TransportError, FidoDevice};
+use crate::transport::Error as TransportError;
+use crate::u2ftypes::U2FDevice;
 use serde_cbor::{de::from_slice, Value};
 
 #[derive(Debug)]
@@ -15,7 +16,7 @@ impl RequestCtap2 for GetNextAssertion {
 
     fn wire_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         Ok(Vec::new())
     }
@@ -26,7 +27,7 @@ impl RequestCtap2 for GetNextAssertion {
         input: &[u8],
     ) -> Result<Self::Output, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         if input.is_empty() {
             return Err(Error::InputTooSmall).map_err(TransportError::Command);

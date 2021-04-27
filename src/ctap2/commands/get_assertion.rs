@@ -1,6 +1,6 @@
 use super::{
-    Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin, Retryable,
-    StatusCode,
+    ApduFormat, Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin,
+    Retryable, StatusCode,
 };
 use crate::consts::{
     PARAMETER_SIZE, U2F_AUTHENTICATE, U2F_CHECK_IS_REGISTERED, U2F_REQUEST_USER_PRESENCE,
@@ -12,8 +12,9 @@ use crate::ctap2::commands::client_pin::Pin;
 use crate::ctap2::commands::get_next_assertion::GetNextAssertion;
 use crate::ctap2::commands::make_credentials::{MakeCredentialsOptions, UserValidation};
 use crate::ctap2::server::{PublicKeyCredentialDescriptor, RelyingParty, User};
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
-use crate::u2ftypes::U2FAPDUHeader;
+use crate::transport::{ApduErrorStatus, Error as TransportError};
+use crate::u2fprotocol::{send_apdu, send_cbor};
+use crate::u2ftypes::U2FDevice;
 use nom::{
     do_parse, named,
     number::complete::{be_u32, be_u8},
@@ -142,9 +143,9 @@ impl Request<AssertionObject> for GetAssertion {
 impl RequestCtap1 for GetAssertion {
     type Output = AssertionObject;
 
-    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<ApduFormat, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
     {
         /// This command is used to check which key_handle is valid for this
         /// token this is sent before a GetAssertion command, to determine which
@@ -160,9 +161,9 @@ impl RequestCtap1 for GetAssertion {
         impl<'assertion> RequestCtap1 for GetAssertionCheck<'assertion> {
             type Output = ();
 
-            fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+            fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<ApduFormat, TransportError>
             where
-                Dev: FidoDevice,
+                Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
             {
                 let flags = U2F_CHECK_IS_REGISTERED;
                 let mut auth_data = Vec::with_capacity(
@@ -175,9 +176,13 @@ impl RequestCtap1 for GetAssertion {
                 auth_data.extend_from_slice(self.key_handle);
 
                 let cmd = U2F_AUTHENTICATE;
-                let apdu = U2FAPDUHeader::serialize(cmd, flags, &auth_data)?;
+                // let apdu = U2FAPDUHeader::serialize(cmd, flags, &auth_data)?;
 
-                Ok(apdu)
+                Ok(ApduFormat {
+                    cmd,
+                    flags,
+                    data: auth_data,
+                })
             }
 
             fn handle_response_ctap1(
@@ -201,8 +206,8 @@ impl RequestCtap1 for GetAssertion {
                     client_data: &self.client_data,
                     rp: &self.rp,
                 };
-
-                match dev.send_apdu(&check_command) {
+                let af = check_command.apdu_format(dev).ok()?;
+                match send_apdu(dev, af.cmd, af.flags, &af.data) {
                     Ok(_) => Some(allowed_handle.id.clone()),
                     _ => None,
                 }
@@ -225,9 +230,12 @@ impl RequestCtap1 for GetAssertion {
         auth_data.extend_from_slice(key_handle.as_ref());
 
         let cmd = U2F_AUTHENTICATE;
-        let apdu = U2FAPDUHeader::serialize(cmd, flags, &auth_data)?;
 
-        Ok(apdu)
+        Ok(ApduFormat {
+            cmd,
+            flags,
+            data: auth_data,
+        })
     }
 
     fn handle_response_ctap1(
@@ -294,7 +302,7 @@ impl RequestCtap2 for GetAssertion {
 
     fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
     {
         let cd = CommandDevice::new(dev, self)?;
 
@@ -307,7 +315,7 @@ impl RequestCtap2 for GetAssertion {
         input: &[u8],
     ) -> Result<Self::Output, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
     {
         if input.is_empty() {
             return Err(Error::InputTooSmall).map_err(TransportError::Command);
@@ -325,7 +333,7 @@ impl RequestCtap2 for GetAssertion {
 
                 let msg = GetNextAssertion;
                 for _ in (1..number_of_credentials).rev() {
-                    let new_cred = dev.send_cbor(&msg)?;
+                    let new_cred = send_cbor(dev, &msg)?;
                     assertions.push(new_cred.into());
                 }
 

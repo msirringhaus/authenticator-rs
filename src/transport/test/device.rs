@@ -8,9 +8,9 @@ use std::fmt;
 use std::io;
 
 use super::TestCase;
-use crate::consts::CID_BROADCAST;
+use crate::consts::{Capability, CID_BROADCAST};
 use crate::ctap2::commands::{client_pin::ECDHSecret, get_info::AuthenticatorInfo};
-use crate::transport::hid::{Capability, Cid, DeviceVersion, HIDDevice};
+use crate::transport::hid::{Cid, DeviceVersion, HIDDevice};
 use crate::transport::Error;
 use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
 
@@ -91,37 +91,37 @@ impl HIDDevice for Device {
         self.initialized = true;
     }
 
-    fn cid(&self) -> &Cid {
-        &self.cid
-    }
+    // fn cid(&self) -> &Cid {
+    //     &self.cid
+    // }
 
-    fn set_cid(&mut self, cid: Cid) {
-        self.cid = cid;
-    }
+    // fn set_cid(&mut self, cid: Cid) {
+    //     self.cid = cid;
+    // }
 
-    fn u2fhid_version(&self) -> u8 {
-        self.u2fhid_version
-    }
+    // fn u2fhid_version(&self) -> u8 {
+    //     self.u2fhid_version
+    // }
 
-    fn set_u2fhid_version(&mut self, version: u8) {
-        self.u2fhid_version = version;
-    }
+    // fn set_u2fhid_version(&mut self, version: u8) {
+    //     self.u2fhid_version = version;
+    // }
 
-    fn device_version(&self) -> &DeviceVersion {
-        &self.device_version
-    }
+    // fn device_version(&self) -> &DeviceVersion {
+    //     &self.device_version
+    // }
 
-    fn set_device_version(&mut self, device_version: DeviceVersion) {
-        self.device_version = device_version;
-    }
+    // fn set_device_version(&mut self, device_version: DeviceVersion) {
+    //     self.device_version = device_version;
+    // }
 
-    fn capabilities(&self) -> Capability {
-        self.capability
-    }
+    // fn capabilities(&self) -> Capability {
+    //     self.capability
+    // }
 
-    fn set_capabilities(&mut self, capabilities: Capability) {
-        self.capability = capabilities;
-    }
+    // fn set_capabilities(&mut self, capabilities: Capability) {
+    //     self.capability = capabilities;
+    // }
 
     fn shared_secret(&self) -> Option<&ECDHSecret> {
         self.shared_secret.as_ref()
@@ -181,14 +181,13 @@ mod fido2simple {
     use rand::{thread_rng, RngCore};
     use serde_cbor::from_slice;
 
-    use crate::consts::{MAX_HID_RPT_SIZE, U2FHID_INIT as CTAPHID_INIT};
+    use crate::consts::{Capability, HIDCmd, MAX_HID_RPT_SIZE};
     use crate::ctap2::attestation::{
         AAGuid, AttestationObject, AttestationStatement, AttestedCredentialData, AuthenticatorData,
         AuthenticatorDataFlags,
     };
     use crate::ctap2::commands::test::AUTHENTICATOR_INFO_PAYLOAD;
     use crate::ctap2::commands::{Command, StatusCode};
-    use crate::transport::hid::{Capability, HIDCmd};
 
     use super::TestDevice;
     use crate::transport::platform::commands::MakeCredentials;
@@ -440,7 +439,7 @@ mod fido2simple {
                     }
 
                     let mut command = [0u8; 1];
-                    if buff.read(&mut command)? != 1 && command[0] != CTAPHID_INIT {
+                    if buff.read(&mut command)? != 1 && HIDCmd::from(command[0]) != HIDCmd::Init {
                         return Err(io::Error::new(io::ErrorKind::Other, "Expected hid init cmd"));
                     }
 

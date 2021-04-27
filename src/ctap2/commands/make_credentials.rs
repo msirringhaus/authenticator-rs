@@ -1,28 +1,27 @@
 use super::{
-    Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin, Retryable,
-    StatusCode,
+    ApduFormat, Command, CommandDevice, Error, Request, RequestCtap1, RequestCtap2, RequestWithPin,
+    Retryable, StatusCode,
 };
 use crate::consts::{PARAMETER_SIZE, U2F_REGISTER, U2F_REQUEST_USER_PRESENCE};
 use crate::ctap::CollectedClientData;
 use crate::ctap::{ClientDataHash, Version};
 use crate::ctap2::attestation::AttestationObject;
-use crate::ctap2::commands::client_pin::{Pin};
+use crate::ctap2::commands::client_pin::Pin;
 use crate::ctap2::server::{
     PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, User,
 };
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
-use crate::u2ftypes::U2FAPDUHeader;
-
-
+use crate::transport::{ApduErrorStatus, Error as TransportError};
+use crate::u2ftypes::U2FDevice;
+#[cfg(test)]
+use serde::Deserialize;
 use serde::{
     ser::{Error as SerError, SerializeMap},
     Serialize, Serializer,
 };
-#[cfg(test)]
-use serde::{Deserialize};
 use serde_cbor::{self, de::from_slice, ser, Value};
 use serde_json::{value as json_value, Map};
-
+use std::fmt;
+use std::io;
 
 #[derive(Copy, Clone, Debug, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -98,7 +97,7 @@ impl MakeCredentials {
         }
     }
 
-    pub(crate) fn handle_response<Dev: FidoDevice>(
+    pub(crate) fn handle_response<Dev: U2FDevice + io::Read + io::Write + fmt::Debug>(
         &self,
         dev: &mut Dev,
         input: &[u8],
@@ -196,9 +195,9 @@ impl Request<(AttestationObject, CollectedClientData)> for MakeCredentials {
 impl RequestCtap1 for MakeCredentials {
     type Output = (AttestationObject, CollectedClientData);
 
-    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<ApduFormat, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         let flags = if self.options.ask_user_validation() {
             U2F_REQUEST_USER_PRESENCE
@@ -211,9 +210,13 @@ impl RequestCtap1 for MakeCredentials {
         register_data.extend_from_slice(self.rp.hash().as_ref());
 
         let cmd = U2F_REGISTER;
-        let apdu = U2FAPDUHeader::serialize(cmd, flags, &register_data)?;
+        // let apdu = U2FAPDUHeader::serialize(cmd, flags, &register_data)?;
 
-        Ok(apdu)
+        Ok(ApduFormat {
+            cmd,
+            flags,
+            data: register_data,
+        })
     }
 
     fn handle_response_ctap1(
@@ -297,7 +300,7 @@ impl RequestCtap2 for MakeCredentials {
 
     fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
     {
         let cd = CommandDevice::new(dev, self)?;
 
@@ -310,7 +313,7 @@ impl RequestCtap2 for MakeCredentials {
         input: &[u8],
     ) -> Result<Self::Output, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + io::Read + io::Write + fmt::Debug,
     {
         if input.is_empty() {
             return Err(Error::InputTooSmall).map_err(TransportError::Command);

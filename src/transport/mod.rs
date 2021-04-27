@@ -1,3 +1,4 @@
+use crate::consts::ProtocolSupport;
 use crate::consts::{SW_CONDITIONS_NOT_SATISFIED, SW_NO_ERROR, SW_WRONG_DATA, SW_WRONG_LENGTH};
 use crate::ctap2::commands::{
     client_pin::ECDHSecret, get_info::AuthenticatorInfo, Error as CommandError, RequestCtap1,
@@ -7,8 +8,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::path;
-
-pub mod hid;
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 pub mod hidproto;
@@ -207,21 +206,4 @@ where
 
     fn authenticator_info(&self) -> Option<&AuthenticatorInfo>;
     fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo);
-}
-
-bitflags! {
-    pub struct ProtocolSupport: u8 {
-        const FIDO1 = 0x01;
-        const FIDO2 = 0x02;
-    }
-}
-
-impl ProtocolSupport {
-    pub fn has_fido1(&self) -> bool {
-        self.contains(ProtocolSupport::FIDO1)
-    }
-
-    pub fn has_fido2(&self) -> bool {
-        self.contains(ProtocolSupport::FIDO2)
-    }
 }

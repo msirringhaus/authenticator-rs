@@ -1,6 +1,7 @@
 use super::get_info::AuthenticatorInfo;
 use super::*;
 use crate::ctap::ClientDataHash;
+use crate::u2ftypes::U2FDevice;
 use cose::SignatureAlgorithm;
 use serde::{
     de::{Error as SerdeError, MapAccess, Visitor},
@@ -493,7 +494,7 @@ where
 
     fn wire_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         let client_pin = self.as_client_pin()?;
         let output = to_vec(&client_pin).map_err(Error::Serialization)?;
@@ -508,7 +509,7 @@ where
         input: &[u8],
     ) -> Result<Self::Output, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         trace!("Client pin subcomand response:{:#04X?}", &input);
 

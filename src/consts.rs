@@ -31,15 +31,64 @@ pub const U2FHID_FRAME_TIMEOUT: u32 = 500; // Default frame timeout in ms
 pub const U2FHID_TRANS_TIMEOUT: u32 = 3000; // Default message timeout in ms
 
 // U2FHID native commands
-pub const U2FHID_PING: u8 = TYPE_INIT | 0x01; // Echo data through local processor only
-pub const U2FHID_MSG: u8 = TYPE_INIT | 0x03; // Send U2F message frame
-pub const U2FHID_LOCK: u8 = TYPE_INIT | 0x04; // Send lock channel command
-pub const U2FHID_INIT: u8 = TYPE_INIT | 0x06; // Channel initialization
-pub const U2FHID_WINK: u8 = TYPE_INIT | 0x08; // Send device identification wink
-pub const U2FHID_CBOR: u8 = TYPE_INIT | 0x10; // Encapsulated CBOR encoded message
-pub const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11; // Cancel outstanding requests
-pub const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f; // Error response
-pub const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b; // Should be sent a an authenticator every 100ms and whenever a status changes
+const U2FHID_PING: u8 = TYPE_INIT | 0x01; // Echo data through local processor only
+const U2FHID_MSG: u8 = TYPE_INIT | 0x03; // Send U2F message frame
+const U2FHID_LOCK: u8 = TYPE_INIT | 0x04; // Send lock channel command
+const U2FHID_INIT: u8 = TYPE_INIT | 0x06; // Channel initialization
+const U2FHID_WINK: u8 = TYPE_INIT | 0x08; // Send device identification wink
+const U2FHID_CBOR: u8 = TYPE_INIT | 0x10; // Encapsulated CBOR encoded message
+const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11; // Cancel outstanding requests
+const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f; // Error response
+const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b; // Should be sent a an authenticator every 100ms and whenever a status changes
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(u8)]
+pub enum HIDCmd {
+    Ping,
+    Msg,
+    Lock,
+    Init,
+    Wink,
+    Cbor,
+    Cancel,
+    Keepalive,
+    Error,
+    Unknown(u8),
+}
+
+impl Into<u8> for HIDCmd {
+    fn into(self) -> u8 {
+        match self {
+            HIDCmd::Ping => U2FHID_PING,
+            HIDCmd::Msg => U2FHID_MSG,
+            HIDCmd::Lock => U2FHID_LOCK,
+            HIDCmd::Init => U2FHID_INIT,
+            HIDCmd::Wink => U2FHID_WINK,
+            HIDCmd::Cbor => U2FHID_CBOR,
+            HIDCmd::Cancel => U2FHID_CANCEL,
+            HIDCmd::Keepalive => U2FHID_KEEPALIVE,
+            HIDCmd::Error => U2FHID_ERROR,
+            HIDCmd::Unknown(v) => v,
+        }
+    }
+}
+
+impl From<u8> for HIDCmd {
+    fn from(v: u8) -> HIDCmd {
+        match v {
+            U2FHID_PING => HIDCmd::Ping,
+            U2FHID_MSG => HIDCmd::Msg,
+            U2FHID_LOCK => HIDCmd::Lock,
+            U2FHID_INIT => HIDCmd::Init,
+            U2FHID_WINK => HIDCmd::Wink,
+            U2FHID_CBOR => HIDCmd::Cbor,
+            U2FHID_CANCEL => HIDCmd::Cancel,
+            U2FHID_KEEPALIVE => HIDCmd::Keepalive,
+            U2FHID_ERROR => HIDCmd::Error,
+            v => HIDCmd::Unknown(v),
+        }
+    }
+}
 
 // U2FHID_MSG commands
 pub const U2F_VENDOR_FIRST: u8 = TYPE_INIT | 0x40; // First vendor defined command
@@ -60,8 +109,42 @@ pub const U2F_CHECK_IS_REGISTERED: u8 = 0x07; // Check if the key handle is regi
 
 // U2FHID_INIT command defines
 pub const INIT_NONCE_SIZE: usize = 8; // Size of channel initialization challenge
-pub const CAPFLAG_WINK: u8 = 0x01; // Device supports WINK command
-pub const CAPFLAG_LOCK: u8 = 0x02; // Device supports LOCK command
+
+bitflags! {
+    pub struct Capability: u8 {
+        const WINK = 0x01;
+        const LOCK = 0x02;
+        const CBOR = 0x04;
+        const NMSG = 0x08;
+    }
+}
+
+impl Capability {
+    pub fn has_fido1(self) -> bool {
+        !self.contains(Capability::NMSG)
+    }
+
+    pub fn has_fido2(self) -> bool {
+        self.contains(Capability::CBOR)
+    }
+}
+
+bitflags! {
+    pub struct ProtocolSupport: u8 {
+        const FIDO1 = 0x01;
+        const FIDO2 = 0x02;
+    }
+}
+
+impl ProtocolSupport {
+    pub fn has_fido1(&self) -> bool {
+        self.contains(ProtocolSupport::FIDO1)
+    }
+
+    pub fn has_fido2(&self) -> bool {
+        self.contains(ProtocolSupport::FIDO2)
+    }
+}
 
 // Low-level error codes. Return as negatives.
 

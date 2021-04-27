@@ -1,10 +1,13 @@
+use crate::u2fprotocol::send_cbor;
+use crate::u2ftypes::U2FDevice;
 use serde_cbor::{error, Value};
 use serde_json::{self as json};
 use std::error::Error as StdErrorT;
 use std::fmt;
+use std::io::{Read, Write};
 
 use crate::ctap::{ClientDataHash, Version};
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
+use crate::transport::{ApduErrorStatus, Error as TransportError};
 
 pub mod get_info;
 use get_info::GetInfo;
@@ -65,12 +68,18 @@ impl<T> From<T> for Retryable<T> {
     }
 }
 
+pub(crate) struct ApduFormat {
+    cmd: u8,
+    flags: u8,
+    data: Vec<u8>,
+}
+
 pub(crate) trait RequestCtap1: fmt::Debug {
     type Output;
 
-    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn apdu_format<Dev>(&self, dev: &mut Dev) -> Result<ApduFormat, TransportError>
     where
-        Dev: FidoDevice;
+        Dev: U2FDevice + Read + Write + fmt::Debug;
 
     fn handle_response_ctap1(
         &self,
@@ -86,7 +95,7 @@ pub(crate) trait RequestCtap2: fmt::Debug {
 
     fn wire_format<Dev>(&self, dev: &mut Dev) -> Result<Vec<u8>, TransportError>
     where
-        Dev: FidoDevice;
+        Dev: U2FDevice + Read + Write + fmt::Debug;
 
     fn handle_response_ctap2<Dev>(
         &self,
@@ -94,7 +103,7 @@ pub(crate) trait RequestCtap2: fmt::Debug {
         input: &[u8],
     ) -> Result<Self::Output, TransportError>
     where
-        Dev: FidoDevice;
+        Dev: U2FDevice + Read + Write + fmt::Debug;
 }
 
 trait RequestWithPin: RequestCtap2 {
@@ -349,13 +358,13 @@ where
 {
     fn new<Dev>(dev: &mut Dev, command: &'command Command) -> Result<Self, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice + Read + Write + fmt::Debug,
     {
-        let info = if let Some(authenticator_info) = dev.authenticator_info().cloned() {
+        let info = if let Some(authenticator_info) = dev.get_authenticator_info().cloned() {
             authenticator_info
         } else {
             let info_command = GetInfo::default();
-            let info = dev.send_cbor(&info_command)?;
+            let info = send_cbor(dev, &info_command)?;
             debug!("infos: {:?}", info);
 
             dev.set_authenticator_info(info.clone());
@@ -369,18 +378,18 @@ where
                 return Err(Error::StatusCode(StatusCode::PinRequired, None).into());
             };
 
-            let shared_secret = if let Some(shared_secret) = dev.shared_secret().cloned() {
+            let shared_secret = if let Some(shared_secret) = dev.get_shared_secret().cloned() {
                 shared_secret
             } else {
                 let pin_command = GetKeyAgreement::new(&info)?;
-                let device_key_agreement = dev.send_cbor(&pin_command)?;
+                let device_key_agreement = send_cbor(dev, &pin_command)?;
                 let shared_secret = device_key_agreement.shared_secret()?;
                 dev.set_shared_secret(shared_secret.clone());
                 shared_secret
             };
 
             let pin_command = GetPinToken::new(&info, &shared_secret, &pin)?;
-            let pin_token = dev.send_cbor(&pin_command)?;
+            let pin_token = send_cbor(dev, &pin_command)?;
 
             Some(
                 pin_token
@@ -475,7 +484,6 @@ pub mod test {
     use crate::ctap2::server::{
         Alg, PublicKeyCredentialParameters, RelyingParty, RelyingPartyData, User,
     };
-    use crate::transport::hid::HIDDevice;
     use crate::transport::platform::device::Device;
     use crate::transport::platform::TestCase;
 

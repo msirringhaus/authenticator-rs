@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+use crate::ctap2::commands::client_pin::ECDHSecret;
+use crate::ctap2::commands::get_info::AuthenticatorInfo;
 use std::{cmp, fmt, io, str};
 
 use crate::consts::*;
@@ -43,6 +45,12 @@ pub trait U2FDevice {
     fn get_property(&self, prop_name: &str) -> io::Result<String>;
     fn get_device_info(&self) -> U2FDeviceInfo;
     fn set_device_info(&mut self, dev_info: U2FDeviceInfo);
+
+    fn get_authenticator_info(&self) -> Option<&AuthenticatorInfo>;
+    fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo);
+
+    fn get_shared_secret(&self) -> Option<&ECDHSecret>;
+    fn set_shared_secret(&mut self, secret: ECDHSecret);
 }
 
 // Init structure for U2F Communications. Tells the receiver what channel
@@ -169,7 +177,7 @@ pub struct U2FHIDInitResp {
     pub version_major: u8,
     pub version_minor: u8,
     pub version_build: u8,
-    pub cap_flags: u8,
+    pub cap_flags: Capability,
 }
 
 impl U2FHIDInitResp {
@@ -195,7 +203,7 @@ impl U2FHIDInitResp {
             version_major: data[INIT_NONCE_SIZE + 5],
             version_minor: data[INIT_NONCE_SIZE + 6],
             version_build: data[INIT_NONCE_SIZE + 7],
-            cap_flags: data[INIT_NONCE_SIZE + 8],
+            cap_flags: Capability::from_bits_truncate(data[INIT_NONCE_SIZE + 8]),
         };
 
         Ok(rsp)
@@ -228,6 +236,28 @@ impl U2FAPDUHeader {
     }
 }
 
+// pub struct U2FCBORHeader {}
+// impl U2FCBORHeader {
+//     pub fn serialize(ins: u8, p1: u8, data: &[u8]) -> io::Result<Vec<u8>> {
+//         if data.len() > 0xffff {
+//             return Err(io_err("payload length > 2^16"));
+//         }
+
+//         // Size of header + data + 2 zero bytes for maximum return size.
+//         let mut bytes = vec![0u8; U2FAPDUHEADER_SIZE + data.len() + 2];
+//         // cla is always 0 for our requirements
+//         bytes[1] = ins;
+//         bytes[2] = p1;
+//         // p2 is always 0, at least, for our requirements.
+//         // lc[0] should always be 0.
+//         bytes[5] = (data.len() >> 8) as u8;
+//         bytes[6] = data.len() as u8;
+//         bytes[7..7 + data.len()].copy_from_slice(data);
+
+//         Ok(bytes)
+//     }
+// }
+
 #[derive(Clone, Debug)]
 pub struct U2FDeviceInfo {
     pub vendor_name: Vec<u8>,
@@ -236,7 +266,7 @@ pub struct U2FDeviceInfo {
     pub version_major: u8,
     pub version_minor: u8,
     pub version_build: u8,
-    pub cap_flags: u8,
+    pub cap_flags: Capability,
 }
 
 impl fmt::Display for U2FDeviceInfo {
@@ -250,7 +280,34 @@ impl fmt::Display for U2FDeviceInfo {
             &self.version_major,
             &self.version_minor,
             &self.version_build,
-            to_hex(&[self.cap_flags], ":"),
+            to_hex(&[self.cap_flags.bits()], ":"),
         )
+    }
+}
+
+impl U2FDeviceInfo {
+    fn protocol_support(&self) -> ProtocolSupport {
+        let mut support = ProtocolSupport::FIDO1;
+
+        if self.cap_flags.contains(Capability::CBOR) {
+            support |= ProtocolSupport::FIDO2;
+        }
+        if self.version_major >= 2 && self.cap_flags.contains(Capability::NMSG) {
+            // CAPABILITY_NMSG:
+            //   If set to 1, authenticator DOES NOT implement U2FHID_MSG function
+            support &= !ProtocolSupport::FIDO1;
+        }
+
+        support
+    }
+
+    pub fn supports_fido1(self) -> bool {
+        // CAPABILITY_NMSG:
+        // If set to 1, authenticator DOES NOT implement U2FHID_MSG function
+        !self.cap_flags.contains(Capability::NMSG)
+    }
+
+    pub fn supports_fido2(&self) -> bool {
+        self.cap_flags.contains(Capability::CBOR)
     }
 }

@@ -1,7 +1,7 @@
-use super::{Error, RequestCtap1, Retryable};
+use super::{ApduFormat, Error, RequestCtap1, Retryable};
 use crate::consts::U2F_VERSION;
-use crate::transport::{ApduErrorStatus, Error as TransportError, FidoDevice};
-use crate::u2ftypes::U2FAPDUHeader;
+use crate::transport::{ApduErrorStatus, Error as TransportError};
+use crate::u2ftypes::{U2FAPDUHeader, U2FDevice};
 use std::ffi::CString;
 use std::io;
 
@@ -51,15 +51,17 @@ impl RequestCtap1 for GetVersion {
         }
     }
 
-    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<Vec<u8>, TransportError>
+    fn apdu_format<Dev>(&self, _dev: &mut Dev) -> Result<ApduFormat, TransportError>
     where
-        Dev: FidoDevice,
+        Dev: U2FDevice,
     {
         let flags = 0;
 
         let cmd = U2F_VERSION;
-        let apdu = U2FAPDUHeader::serialize(cmd, flags, &[])?;
-
-        Ok(apdu)
+        Ok(ApduFormat {
+            cmd,
+            flags,
+            data: Vec::new(),
+        })
     }
 }
