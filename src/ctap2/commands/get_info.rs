@@ -141,7 +141,7 @@ impl RequestCtap2 for GetInfo {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 pub struct AuthenticatorOptions {
     /// Indicates that the device is attached to the client and therefore can’t
     /// be removed and used on another client.
@@ -199,7 +199,7 @@ impl Default for AuthenticatorOptions {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AuthenticatorInfo {
     pub(crate) versions: Vec<String>,
     pub(crate) extensions: Vec<String>,
@@ -297,5 +297,49 @@ impl<'de> Deserialize<'de> for AuthenticatorInfo {
         }
 
         deserializer.deserialize_bytes(AuthenticatorInfoVisitor)
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::{AAGuid, AuthenticatorInfo, AuthenticatorOptions};
+    use serde_cbor::de::from_slice;
+
+    // Data take from https://github.com/Yubico/python-fido2/blob/master/test/test_ctap2.py
+    pub const AAGUID_RAW: [u8; 16] = [
+        0xF8, 0xA0, 0x11, 0xF3, 0x8C, 0x0A, 0x4D, 0x15, 0x80, 0x06, 0x17, 0x11, 0x1F, 0x9E, 0xDC,
+        0x7D,
+    ];
+
+    pub const AUTHENTICATOR_INFO_PAYLOAD: [u8; 89] = [
+        0xa6, 0x01, 0x82, 0x66, 0x55, 0x32, 0x46, 0x5f, 0x56, 0x32, 0x68, 0x46, 0x49, 0x44, 0x4f,
+        0x5f, 0x32, 0x5f, 0x30, 0x02, 0x82, 0x63, 0x75, 0x76, 0x6d, 0x6b, 0x68, 0x6d, 0x61, 0x63,
+        0x2d, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x03, 0x50, 0xf8, 0xa0, 0x11, 0xf3, 0x8c, 0x0a,
+        0x4d, 0x15, 0x80, 0x06, 0x17, 0x11, 0x1f, 0x9e, 0xdc, 0x7d, 0x04, 0xa4, 0x62, 0x72, 0x6b,
+        0xf5, 0x62, 0x75, 0x70, 0xf5, 0x64, 0x70, 0x6c, 0x61, 0x74, 0xf4, 0x69, 0x63, 0x6c, 0x69,
+        0x65, 0x6e, 0x74, 0x50, 0x69, 0x6e, 0xf4, 0x05, 0x19, 0x04, 0xb0, 0x06, 0x81, 0x01,
+    ];
+
+    #[test]
+    fn parse_authenticator_info() {
+        let authenticator_info: AuthenticatorInfo =
+            from_slice(&AUTHENTICATOR_INFO_PAYLOAD[..]).unwrap();
+
+        let expected = AuthenticatorInfo {
+            versions: vec!["U2F_V2".to_string(), "FIDO_2_0".to_string()],
+            extensions: vec!["uvm".to_string(), "hmac-secret".to_string()],
+            aaguid: AAGuid(AAGUID_RAW),
+            options: AuthenticatorOptions {
+                platform_device: false,
+                resident_key: true,
+                client_pin: Some(false),
+                user_presence: true,
+                user_verification: None,
+            },
+            max_msg_size: Some(1200),
+            pin_protocols: vec![1],
+        };
+
+        assert_eq!(authenticator_info, expected);
     }
 }

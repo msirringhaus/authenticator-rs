@@ -170,8 +170,10 @@ where
 {
     if dev.get_device_info().supports_fido2() {
         let command = GetInfo::default();
-        let info =
-            send_cbor(dev, &command).map_err(|_| io::Error::new(io::ErrorKind::Other, "TODO"))?; // TODO(MS)
+        let info = send_cbor(dev, &command).map_err(|e| {
+            warn!("ERROR {:?}", e);
+            io::Error::new(io::ErrorKind::Other, "TODO")
+        })?; // TODO(MS)
         debug!("{:?} infos: {:?}", dev.get_cid(), info);
 
         dev.set_authenticator_info(info);
@@ -271,28 +273,16 @@ where
     let data = msg.wire_format(dev)?;
     let mut cbor: Vec<u8> = Vec::with_capacity(data.len() + 1);
     // CTAP2 command
-    // cbor.push(cmd);
     cbor.push(Req::command() as u8);
     // payload
     cbor.extend(data);
 
     let resp = sendrecv(dev, HIDCmd::Cbor, &cbor)?;
 
-    // if dev.cid != resp[..4] {
-    //     return Err(io_err("invalid channel id"));
-    // }
-    let cmd = HIDCmd::from(
-        *resp
-            .get(4)
-            .ok_or(transport::Error::UnexpectedInitReplyLen)?,
-    );
+    debug!("got from {:?}: {:?}", dev, to_hex(&resp, " "));
 
-    debug!("got from {:?} status={:?}: {:?}", dev, cmd, resp);
-    if cmd == HIDCmd::Cbor {
-        Ok(msg.handle_response_ctap2(dev, &resp[..])?)
-    } else {
-        Err(transport::Error::UnexpectedCmd(cmd.into()))
-    }
+    let res = Ok(msg.handle_response_ctap2(dev, &resp[..])?);
+    res
 }
 
 ////////////////////////////////////////////////////////////////////////

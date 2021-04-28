@@ -476,9 +476,6 @@ impl From<NSSError> for Error {
 
 #[cfg(test)]
 pub mod test {
-    use serde_cbor::de::from_slice;
-
-    use super::get_info::AuthenticatorInfo;
     use crate::ctap::{CollectedClientData, Origin, WebauthnType};
     use crate::ctap2::commands::make_credentials::MakeCredentials;
     use crate::ctap2::server::{
@@ -528,17 +525,5 @@ pub mod test {
                 0x7a, 0x87, 0x5, 0x1d
             ]
         );
-    }
-
-    pub const AUTHENTICATOR_INFO_PAYLOAD: [u8; 85] =
-        include!("tests/AUTHENTICATOR_INFO_PAYLOAD.in");
-
-    #[test]
-    fn parse_authenticator_info() {
-        let authenticator_info: AuthenticatorInfo =
-            from_slice(&AUTHENTICATOR_INFO_PAYLOAD[..]).unwrap();
-
-        println!("authenticator_info {:?}", authenticator_info);
-        //assert_eq!(true, false);
     }
 }

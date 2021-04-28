@@ -182,12 +182,14 @@ mod fido2simple {
         AAGuid, AttestationObject, AttestationStatement, AttestedCredentialData, AuthenticatorData,
         AuthenticatorDataFlags,
     };
-    use crate::ctap2::commands::test::AUTHENTICATOR_INFO_PAYLOAD;
     use crate::ctap2::commands::{Command, StatusCode};
 
     use super::TestDevice;
     use crate::transport::platform::commands::MakeCredentials;
     use crate::transport::platform::crypto::{Error, PrivateKey};
+
+    pub const AUTHENTICATOR_INFO_PAYLOAD: [u8; 85] =
+        include!("../../ctap2/commands/tests/AUTHENTICATOR_INFO_PAYLOAD.in");
 
     #[derive(Debug)]
     enum FidoStateInternal {
