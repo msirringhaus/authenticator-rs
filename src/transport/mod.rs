@@ -1,9 +1,5 @@
-use crate::consts::ProtocolSupport;
 use crate::consts::{SW_CONDITIONS_NOT_SATISFIED, SW_NO_ERROR, SW_WRONG_DATA, SW_WRONG_LENGTH};
-use crate::ctap2::commands::{
-    client_pin::ECDHSecret, get_info::AuthenticatorInfo, Error as CommandError, RequestCtap1,
-    RequestCtap2,
-};
+use crate::ctap2::commands::Error as CommandError;
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
@@ -156,54 +152,4 @@ impl fmt::Display for Error {
             }
         }
     }
-}
-
-pub(crate) trait FidoDevice
-where
-    Self: fmt::Debug,
-{
-    type BuildParameters;
-
-    //     fn send_msg<'msg, Out, Req: Request<Out>>(&mut self, msg: &'msg Req) -> Result<Out, Error> {
-    //         if !self.initialized() {
-    //             return Err(Error::DeviceNotInitialized);
-    //         }
-    //
-    //         // TODO(baloo): There is no logic in here, have to rework that
-    //         if msg.minimum_version() == Version::CTAP2 && !self.protocol_support().has_fido2() {
-    //             info!("{:?} does not support Fido2 commands", self);
-    //             return Err(Error::UnsupportedCommand);
-    //         }
-    //         if msg.maximum_version() == Version::CTAP1 && !self.protocol_support().has_fido1() {
-    //             info!("{:?} does not support Fido1 commands", self);
-    //             return Err(Error::UnsupportedCommand);
-    //         }
-    //
-    //         if msg.maximum_version() != Version::CTAP1 && self.protocol_support().has_fido2() {
-    //             self.send_cbor(msg)
-    //         } else {
-    //             self.send_apdu(msg)
-    //         }
-    //     }
-
-    fn send_apdu<Req: RequestCtap1>(&mut self, msg: &Req) -> Result<Req::Output, Error>;
-    fn send_cbor<Req: RequestCtap2>(&mut self, msg: &Req) -> Result<Req::Output, Error>;
-
-    fn new(parameters: Self::BuildParameters) -> Result<Self, Error>
-    where
-        Self::BuildParameters: Sized,
-        Self: Sized;
-
-    fn init(&mut self) -> Result<(), Error>;
-
-    fn initialized(&self) -> bool;
-    fn initialize(&mut self);
-
-    fn protocol_support(&self) -> ProtocolSupport;
-
-    fn set_shared_secret(&mut self, secret: ECDHSecret);
-    fn shared_secret(&self) -> Option<&ECDHSecret>;
-
-    fn authenticator_info(&self) -> Option<&AuthenticatorInfo>;
-    fn set_authenticator_info(&mut self, authenticator_info: AuthenticatorInfo);
 }
