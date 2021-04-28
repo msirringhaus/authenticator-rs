@@ -53,7 +53,6 @@ impl Device {
     }
 }
 
-/* Until everything is moved to HIDDevice */
 impl U2FDevice for Device {
     fn get_cid(&self) -> &[u8; 4] {
         &self.cid
@@ -77,8 +76,6 @@ impl U2FDevice for Device {
     }
 
     fn get_device_info(&self) -> U2FDeviceInfo {
-        // unwrap is okay, as dev_info must have already been set, else
-        // a programmer error
         self.device_info.clone()
     }
 

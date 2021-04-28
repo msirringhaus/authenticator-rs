@@ -28,7 +28,7 @@ where
     thread_rng().fill_bytes(&mut nonce);
 
     // Initialize the device and check its version.
-    init_device(dev, &nonce).is_ok()
+    init_device(dev, &nonce).is_ok() && init_fido(dev).is_ok()
 }
 
 pub fn u2f_register<T>(dev: &mut T, challenge: &[u8], application: &[u8]) -> io::Result<Vec<u8>>
@@ -128,8 +128,10 @@ where
     T: U2FDevice + Read + Write + std::fmt::Debug,
 {
     assert_eq!(nonce.len(), INIT_NONCE_SIZE);
+    // Send Init to broadcast address to create a new channel
     let raw = sendrecv(dev, HIDCmd::Init, nonce)?;
     let rsp = U2FHIDInitResp::read(&raw, nonce)?;
+    // Get the new Channel ID
     dev.set_cid(rsp.cid);
 
     let vendor = dev
@@ -149,21 +151,6 @@ where
         cap_flags: rsp.cap_flags,
     });
 
-    if dev.get_device_info().supports_fido2() {
-        let command = GetInfo::default();
-        let info =
-            send_cbor(dev, &command).map_err(|_| io::Error::new(io::ErrorKind::Other, "TODO"))?; // TODO(MS)
-        debug!("{:?} infos: {:?}", dev.get_cid(), info);
-
-        dev.set_authenticator_info(info);
-    }
-    if dev.get_device_info().supports_fido1() {
-        // We don't really use the result here
-        if is_v2_device(dev)? == false {
-            unimplemented!();
-            // Err("Should be v2!");
-        }
-    }
     Ok(())
 }
 
@@ -177,6 +164,30 @@ where
     status_word_to_result(status, actual == expected)
 }
 
+fn init_fido<T>(dev: &mut T) -> io::Result<()>
+where
+    T: U2FDevice + Read + Write + std::fmt::Debug,
+{
+    if dev.get_device_info().supports_fido2() {
+        let command = GetInfo::default();
+        let info =
+            send_cbor(dev, &command).map_err(|_| io::Error::new(io::ErrorKind::Other, "TODO"))?; // TODO(MS)
+        debug!("{:?} infos: {:?}", dev.get_cid(), info);
+
+        dev.set_authenticator_info(info);
+    }
+
+    // Device can support both fido1 and fido2 (or only fido1 or only fido2)
+    if dev.get_device_info().supports_fido1() {
+        // We don't really use the result here
+        if is_v2_device(dev)? == false {
+            unimplemented!();
+            // Err("Should be v2!");
+        }
+    }
+
+    Ok(())
+}
 ////////////////////////////////////////////////////////////////////////
 // Error Handling
 ////////////////////////////////////////////////////////////////////////
