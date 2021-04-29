@@ -11,7 +11,7 @@ use crate::ctap2::server::{
     PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, User,
 };
 use crate::transport::{ApduErrorStatus, Error as TransportError};
-use crate::u2ftypes::U2FDevice;
+use crate::u2ftypes::{U2FAPDUHeader, U2FDevice};
 #[cfg(test)]
 use serde::Deserialize;
 use serde::{
@@ -199,6 +199,14 @@ impl RequestCtap1 for MakeCredentials {
     where
         Dev: U2FDevice,
     {
+        // TODO(MS): Mandatory sanity checks are missing:
+        // https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#u2f-authenticatorMakeCredential-interoperability
+        // If any of the below conditions is not true, platform errors out with CTAP2_ERR_UNSUPPORTED_OPTION.
+        //  * pubKeyCredParams must use the ES256 algorithm (-7).
+        //  * Options must not include "rk" set to true.
+        //  * Options must not include "uv" set to true.
+
+        // TODO(MS): Basically the same as u2fprotocol.rs - u2f_register()
         let flags = if self.options.ask_user_validation() {
             U2F_REQUEST_USER_PRESENCE
         } else {
@@ -210,12 +218,12 @@ impl RequestCtap1 for MakeCredentials {
         register_data.extend_from_slice(self.rp.hash().as_ref());
 
         let cmd = U2F_REGISTER;
-        // let apdu = U2FAPDUHeader::serialize(cmd, flags, &register_data)?;
+        let apdu = U2FAPDUHeader::serialize(cmd, flags, &register_data)?;
 
         Ok(ApduFormat {
             cmd,
             flags,
-            data: register_data,
+            data: apdu,
         })
     }
 

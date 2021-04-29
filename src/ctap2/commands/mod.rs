@@ -1,4 +1,4 @@
-use crate::u2fprotocol::send_cbor;
+use super::send_cbor;
 use crate::u2ftypes::U2FDevice;
 use serde_cbor::{error, Value};
 use serde_json::{self as json};

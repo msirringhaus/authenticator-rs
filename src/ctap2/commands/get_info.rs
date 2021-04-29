@@ -1,4 +1,4 @@
-use super::{Command, Error, RequestCtap2, StatusCode};
+use super::{Command, Error, RequestCtap2};
 use crate::transport::Error as TransportError;
 use crate::u2ftypes::U2FDevice;
 use serde::{
@@ -6,7 +6,6 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 use serde_cbor::de::from_slice;
-use serde_cbor::Value;
 use std::fmt;
 
 #[derive(Serialize, PartialEq, Eq, Clone)]

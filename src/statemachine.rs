@@ -3,10 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use crate::consts::PARAMETER_SIZE;
+use crate::ctap2::ctap2_init_device;
 use crate::errors;
 use crate::statecallback::StateCallback;
 use crate::transport::platform::{device::Device, transaction::Transaction};
-use crate::u2fprotocol::{u2f_init_device, u2f_is_keyhandle_valid, u2f_register, u2f_sign};
+use crate::u2fprotocol::{u2f_is_keyhandle_valid, u2f_register, u2f_sign};
 use crate::u2ftypes::U2FDevice;
 
 use std::sync::mpsc::Sender;
@@ -89,7 +90,7 @@ impl StateMachine {
             };
 
             // Try initializing it.
-            if !dev.is_u2f() || !u2f_init_device(dev) {
+            if !dev.is_u2f() || !ctap2_init_device(dev) {
                 return;
             }
 
@@ -181,7 +182,7 @@ impl StateMachine {
             };
 
             // Try initializing it.
-            if !dev.is_u2f() || !u2f_init_device(dev) {
+            if !dev.is_u2f() || !ctap2_init_device(dev) {
                 return;
             }
 

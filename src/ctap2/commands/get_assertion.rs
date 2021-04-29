@@ -12,8 +12,8 @@ use crate::ctap2::commands::client_pin::Pin;
 use crate::ctap2::commands::get_next_assertion::GetNextAssertion;
 use crate::ctap2::commands::make_credentials::{MakeCredentialsOptions, UserValidation};
 use crate::ctap2::server::{PublicKeyCredentialDescriptor, RelyingParty, User};
+use crate::ctap2::{send_apdu, send_cbor};
 use crate::transport::{ApduErrorStatus, Error as TransportError};
-use crate::u2fprotocol::{send_apdu, send_cbor};
 use crate::u2ftypes::U2FDevice;
 use nom::{
     do_parse, named,
