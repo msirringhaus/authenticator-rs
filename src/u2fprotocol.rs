@@ -179,15 +179,16 @@ where
         dev.set_authenticator_info(info);
     }
 
-    // Device can support both fido1 and fido2 (or only fido1 or only fido2)
-    if dev.get_device_info().supports_fido1() {
-        // We don't really use the result here
-        if is_v2_device(dev)? == false {
-            unimplemented!();
-            // Err("Should be v2!");
-        }
-    }
-
+    // TODO(MS): Original code had this check, but I'm not sure if its needed atm.
+    //           If activated, the testcase test_fido2_get_info needs to be adjusted with
+    //           more read and write data for this additional adpu call
+    // // Device can support both fido1 and fido2 (or only fido1 or only fido2)
+    // if dev.get_device_info().supports_fido1() {
+    //     if is_v2_device(dev)? == false {
+    //         unimplemented!();
+    //         // Err("Should be v2!");
+    //     }
+    // }
     Ok(())
 }
 ////////////////////////////////////////////////////////////////////////
@@ -281,7 +282,7 @@ where
 
     debug!("got from {:?}: {:?}", dev, to_hex(&resp, " "));
 
-    let res = Ok(msg.handle_response_ctap2(dev, &resp[..])?);
+    let res = Ok(msg.handle_response_ctap2(dev, &resp)?);
     res
 }
 
@@ -293,10 +294,15 @@ where
 mod tests {
     use rand::{thread_rng, RngCore};
 
-    use super::{init_device, send_apdu, sendrecv, U2FDevice};
+    use super::{init_device, init_fido, send_apdu, sendrecv, U2FDevice};
     use crate::consts::{Capability, HIDCmd, CID_BROADCAST, SW_NO_ERROR};
+    use crate::ctap2::commands::get_info::test::{AAGUID_RAW, AUTHENTICATOR_INFO_PAYLOAD};
+    use crate::ctap2::commands::get_info::{AAGuid, AuthenticatorInfo, AuthenticatorOptions};
 
+    const IN_HID_RPT_SIZE: usize = 64;
+    const OUT_HID_RPT_SIZE: usize = 64;
     mod platform {
+        use super::{IN_HID_RPT_SIZE, OUT_HID_RPT_SIZE};
         use crate::ctap2::commands::client_pin::ECDHSecret;
         use crate::ctap2::commands::get_info::AuthenticatorInfo;
         use std::io;
@@ -304,9 +310,6 @@ mod tests {
 
         use crate::consts::CID_BROADCAST;
         use crate::u2ftypes::{U2FDevice, U2FDeviceInfo};
-
-        const IN_HID_RPT_SIZE: usize = 64;
-        const OUT_HID_RPT_SIZE: usize = 64;
 
         #[derive(Debug)]
         pub struct TestDevice {
@@ -459,6 +462,75 @@ mod tests {
         assert_eq!(dev_info.version_minor, 0x01);
         assert_eq!(dev_info.version_build, 0x08);
         assert_eq!(dev_info.cap_flags, Capability::WINK); // 0x01
+    }
+
+    #[test]
+    fn test_fido2_get_info() {
+        let mut device = platform::TestDevice::new();
+        let nonce = vec![0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01];
+
+        // channel id
+        let mut cid = [0u8; 4];
+        thread_rng().fill_bytes(&mut cid);
+
+        // init packet
+        let mut msg = CID_BROADCAST.to_vec();
+        msg.extend(vec![HIDCmd::Init.into(), 0x00, 0x08]); // cmd + bcnt
+        msg.extend_from_slice(&nonce);
+        device.add_write(&msg, 0);
+
+        // init_resp packet
+        let mut msg = CID_BROADCAST.to_vec();
+        msg.extend(vec![HIDCmd::Init.into(), 0x00, 0x11]); // cmd + bcnt
+        msg.extend_from_slice(&nonce);
+        msg.extend_from_slice(&cid); // new channel id
+        msg.extend(vec![0x02, 0x04, 0x01, 0x08, 0x01 | 0x04]); // versions + flags (wink+cbor)
+        device.add_read(&msg, 0);
+
+        init_device(&mut device, &nonce).unwrap();
+        assert_eq!(device.get_cid(), &cid);
+
+        let dev_info = device.get_device_info();
+        assert_eq!(dev_info.cap_flags, Capability::WINK | Capability::CBOR);
+
+        // fido 2 request
+        let mut msg = cid.to_vec();
+        msg.extend(vec![HIDCmd::Cbor.into(), 0x00, 0x1]); // cmd + bcnt
+        msg.extend(vec![0x04]); // authenticatorGetInfo
+        device.add_write(&msg, 0);
+
+        // fido response
+        let mut msg = cid.to_vec();
+        msg.extend(vec![HIDCmd::Cbor.into(), 0x00, 0x59]); // cmd + bcnt
+        msg.extend(&AUTHENTICATOR_INFO_PAYLOAD[0..(IN_HID_RPT_SIZE - 7)]);
+        device.add_read(&msg, 0);
+        // Continuation package
+        let mut msg = cid.to_vec();
+        msg.extend(vec![0x00]); // SEQ
+        msg.extend(&AUTHENTICATOR_INFO_PAYLOAD[(IN_HID_RPT_SIZE - 7)..]);
+        device.add_read(&msg, 0);
+
+        init_fido(&mut device).expect("Couldn't init fido");
+
+        let result = device
+            .get_authenticator_info()
+            .expect("Didn't get any authenticator_info");
+        let expected = AuthenticatorInfo {
+            versions: vec!["U2F_V2".to_string(), "FIDO_2_0".to_string()],
+            extensions: vec!["uvm".to_string(), "hmac-secret".to_string()],
+            aaguid: AAGuid(AAGUID_RAW),
+            options: AuthenticatorOptions {
+                platform_device: false,
+                resident_key: true,
+                client_pin: Some(false),
+                user_presence: true,
+                user_verification: None,
+            },
+            max_msg_size: Some(1200),
+            pin_protocols: vec![1],
+        };
+
+        assert_eq!(result, &expected);
     }
 
     #[test]

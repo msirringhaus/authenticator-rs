@@ -121,22 +121,12 @@ impl RequestCtap2 for GetInfo {
         if input.is_empty() {
             return Err(Error::InputTooSmall).map_err(TransportError::Command);
         }
-
-        let status: StatusCode = input[0].into();
-        debug!("response status code: {:?}", status);
         if input.len() > 1 {
-            if status.is_ok() {
-                trace!("parsing authenticator info data: {:#04X?}", &input[1..]);
-                let authenticator_info = from_slice(&input[1..]).map_err(Error::Parsing)?;
-                Ok(authenticator_info)
-            } else {
-                let data: Value = from_slice(&input[1..]).map_err(Error::Parsing)?;
-                Err(Error::StatusCode(status, Some(data))).map_err(TransportError::Command)
-            }
-        } else if status.is_ok() {
-            Err(Error::InputTooSmall).map_err(TransportError::Command)
+            trace!("parsing authenticator info data: {:#04X?}", &input);
+            let authenticator_info = from_slice(&input).map_err(Error::Parsing)?;
+            Ok(authenticator_info)
         } else {
-            Err(Error::StatusCode(status, None)).map_err(TransportError::Command)
+            Err(Error::InputTooSmall).map_err(TransportError::Command)
         }
     }
 }
@@ -146,12 +136,12 @@ pub struct AuthenticatorOptions {
     /// Indicates that the device is attached to the client and therefore can’t
     /// be removed and used on another client.
     #[serde(rename = "plat")]
-    platform_device: bool,
+    pub(crate) platform_device: bool,
     /// Indicates that the device is capable of storing keys on the device
     /// itself and therefore can satisfy the authenticatorGetAssertion request
     /// with allowList parameter not specified or empty.
     #[serde(rename = "rk")]
-    resident_key: bool,
+    pub(crate) resident_key: bool,
 
     /// Client PIN:
     ///  If present and set to true, it indicates that the device is capable of
@@ -162,11 +152,11 @@ pub struct AuthenticatorOptions {
     ///   PIN from the client.
     /// Client PIN is one of the ways to do user verification.
     #[serde(rename = "clientPin")]
-    client_pin: Option<bool>,
+    pub(crate) client_pin: Option<bool>,
 
     /// Indicates that the device is capable of testing user presence.
     #[serde(rename = "up")]
-    user_presence: bool,
+    pub(crate) user_presence: bool,
 
     /// Indicates that the device is capable of verifying the user within
     /// itself. For example, devices with UI, biometrics fall into this
@@ -184,7 +174,7 @@ pub struct AuthenticatorOptions {
     /// able to do Client PIN, it will return both "uv" and the Client PIN
     /// option.
     #[serde(rename = "uv")]
-    user_verification: Option<bool>,
+    pub(crate) user_verification: Option<bool>,
 }
 
 impl Default for AuthenticatorOptions {
