@@ -39,6 +39,8 @@ jobs:
 
   build-linux-nss:
     runs-on: ubuntu-latest
+    env:
+        NSS_DIR: /usr/lib64
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -60,14 +62,12 @@ jobs:
       - name: Build
         uses: actions-rs/cargo@v1
         with:
-          env: NSS_DIR=/usr/lib64/
           command: build
           args: --all --release
 
       - name: Test
         uses: actions-rs/cargo@v1
         with:
-          env: NSS_DIR=/usr/lib64/
           command: test
           args: -- --nocapture
 
