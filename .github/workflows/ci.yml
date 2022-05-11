@@ -41,7 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
         NSS_DIR: /usr/lib/x86_64-linux-gnu/nss/
-        CFLAGS: -L/usr/lib/x86_64-linux-gnu/nss/
+        NSS_USE_FOLDED_LIBS: 0
+        LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/nss/:$LD_LIBRARY_PATH
     steps:
       - name: Checkout
         uses: actions/checkout@v1
