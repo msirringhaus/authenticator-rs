@@ -59,7 +59,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libudev-dev libnss3
           # This is a really ugly hack, but I fail to find another way
-          sudo ln -s /usr/lib/x86_64-linux-gnu/nss/ /usr/lib/x86_64-linux-gnu/lib/
+          sudo ln -s /usr/lib/x86_64-linux-gnu/nss/ /usr/lib/x86_64-linux-gnu/lib
 
       - name: Build
         uses: actions-rs/cargo@v1
