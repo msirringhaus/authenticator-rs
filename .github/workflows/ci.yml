@@ -40,7 +40,7 @@ jobs:
   build-linux-nss:
     runs-on: ubuntu-latest
     env:
-        NSS_DIR: /usr/lib64
+        NSS_DIR: /usr/lib/x86_64-linux-gnu/
     steps:
       - name: Checkout
         uses: actions/checkout@v1
