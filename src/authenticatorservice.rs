@@ -129,18 +129,27 @@ pub trait AuthenticatorTransport {
     ) -> crate::Result<()>;
 
     fn cancel(&mut self) -> crate::Result<()>;
+
     fn reset(
         &mut self,
         timeout: u64,
         status: Sender<crate::StatusUpdate>,
         callback: StateCallback<crate::Result<crate::ResetResult>>,
     ) -> crate::Result<()>;
+
     fn set_pin(
         &mut self,
         timeout: u64,
         new_pin: Pin,
         status: Sender<crate::StatusUpdate>,
         callback: StateCallback<crate::Result<crate::ResetResult>>,
+    ) -> crate::Result<()>;
+
+    fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
     ) -> crate::Result<()>;
 }
 
@@ -479,6 +488,39 @@ impl AuthenticatorService {
 
         Ok(())
     }
+
+    pub fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    ) -> crate::Result<()> {
+        let iterable_transports = self.transports.clone();
+        if iterable_transports.is_empty() {
+            return Err(AuthenticatorError::NoConfiguredTransports);
+        }
+
+        debug!(
+            "info called with {} transports, iterable is {}",
+            self.transports.len(),
+            iterable_transports.len()
+        );
+
+        for (idx, transport_mutex) in iterable_transports.iter().enumerate() {
+            let mut transports_to_cancel = iterable_transports.clone();
+            transports_to_cancel.remove(idx);
+
+            debug!("info transports_to_cancel {}", transports_to_cancel.len());
+
+            transport_mutex.lock().unwrap().info(
+                timeout,
+                status.clone(),
+                clone_and_configure_cancellation_callback(callback.clone(), transports_to_cancel),
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -593,6 +635,15 @@ mod tests {
             _new_pin: Pin,
             _status: Sender<crate::StatusUpdate>,
             _callback: StateCallback<crate::Result<crate::ResetResult>>,
+        ) -> crate::Result<()> {
+            unimplemented!();
+        }
+
+        fn info(
+            &mut self,
+            _timeout: u64,
+            _status: Sender<crate::StatusUpdate>,
+            _callback: StateCallback<crate::Result<crate::InfoResult>>,
         ) -> crate::Result<()> {
             unimplemented!();
         }

@@ -62,6 +62,11 @@ enum QueueAction {
         status: Sender<crate::StatusUpdate>,
         callback: StateCallback<crate::Result<crate::ResetResult>>,
     },
+    InfoCtap2 {
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    },
 }
 
 pub struct U2FManager {
@@ -132,10 +137,14 @@ impl U2FManager {
                     Ok(QueueAction::Reset { .. }) | Ok(QueueAction::SetPin { .. }) => {
                         unimplemented!();
                     }
+                    // Explicitly list the actions we ignore so that extension of
+                    // Queue action flags during compilation that we need to handle
+                    // these cases.
+                    Ok(QueueAction::InfoCtap2 { .. }) => { /* continue */ }
+                    Err(Timeout) => { /* continue */ }
                     Err(RecvTimeoutError::Disconnected) => {
                         break;
-                    }
-                    _ => { /* continue */ }
+                    } // _ => { /* continue */ }
                 }
             }
 
@@ -257,6 +266,15 @@ impl AuthenticatorTransport for U2FManager {
             callback,
         })?)
     }
+
+    fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    ) -> crate::Result<()> {
+        unimplemented!();
+    }
 }
 
 impl Drop for U2FManager {
@@ -349,12 +367,20 @@ impl Manager {
                         //           The repackaging from CTAP1 to CTAP2 happens in self.sign()
                         unimplemented!()
                     }
-
+                    Ok(QueueAction::InfoCtap2 {
+                        timeout,
+                        status,
+                        callback,
+                    }) => {
+                        sm.info(timeout, status, callback);
+                    }
+                    // Explicitly list the actions we ignore so that extension of
+                    // Queue action flags during compilation that we need to handle
+                    // these cases.
+                    Err(Timeout) => { /* continue */ }
                     Err(RecvTimeoutError::Disconnected) => {
                         break;
                     }
-
-                    _ => { /* continue */ }
                 }
             }
 
@@ -566,6 +592,20 @@ impl AuthenticatorTransport for Manager {
         Ok(self.tx.send(QueueAction::SetPin {
             timeout,
             new_pin,
+            status,
+            callback,
+        })?)
+    }
+
+    fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    ) -> crate::Result<()> {
+        debug!("Queuing InfoCtap2 Action");
+        Ok(self.tx.send(QueueAction::InfoCtap2 {
+            timeout,
             status,
             callback,
         })?)

@@ -826,4 +826,52 @@ impl StateMachineCtap2 {
         );
         self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
     }
+
+    pub fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    ) {
+        // Abort any prior register/sign calls.
+        self.cancel();
+        let cbc = callback.clone();
+
+        let transaction = Transaction::new(
+            timeout,
+            callback.clone(),
+            status,
+            move |info, selector, status, _alive| {
+                // Can't use init_and_select here as we only need the info struct!
+                let mut dev = match Device::new(info) {
+                    Ok(dev) => dev,
+                    Err((e, id)) => {
+                        info!("error happened with device: {}", e);
+                        // selector.send(DeviceSelectorEvent::NotAToken(id)).ok()?;
+                        return;
+                    }
+                };
+
+                // Try initializing it.
+                if let Err(e) = dev.init(Nonce::CreateRandom) {
+                    warn!("error while initializing device: {}", e);
+                    // selector.send(DeviceSelectorEvent::NotAToken(dev.id())).ok();
+                    return;
+                }
+
+                match dev.get_authenticator_info() {
+                    None => {
+                        info!("Device does not support CTAP2");
+                        // selector.send(DeviceSelectorEvent::NotAToken(dev.id())).ok();
+                        // implicit return
+                    }
+                    Some(dev_info) => {
+                        let res = Ok(crate::InfoResult::CTAP2(dev_info.clone()));
+                        callback.call(res);
+                    }
+                }
+            },
+        );
+        self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
+    }
 }
