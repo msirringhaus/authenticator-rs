@@ -55,4 +55,4 @@ jobs:
 
       - name: Test
         run: |
-          cargo test ${{ matrix.BUILD_OPTIONS } -- nocapture
+          cargo test ${{ matrix.BUILD_OPTIONS }} -- nocapture
