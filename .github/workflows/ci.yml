@@ -6,36 +6,44 @@ jobs:
   build:
     strategy:
       matrix:
-        # List of all the targets
         include:
           # Linux dummy crypto
           - OS: ubuntu-latest
             TARGET: x86_64-unknown-linux-gnu
-            ADD_INSTALL: sudo apt-get update && sudo apt-get install -y libudev-dev
+            ADD_INSTALL: |
+                sudo apt-get update
+                sudo apt-get install -y libudev-dev
             BUILD_OPTIONS: --features crypto_dummy --no-default-features
+
           # Linux NSS crypto
           - OS: ubuntu-latest
             TARGET: x86_64-unknown-linux-gnu
             ADD_INSTALL: |
                 sudo apt-get update
                 sudo apt-get install -y libudev-dev libnss3
-                # The last part is a really ugly hack, but I fail to find another way
+                # This last part is a really ugly hack, but I fail to find another way,
+                # since rc_crypto is expecting a dir with ./lib/ and ./include/ in it,
+                # with all NSS-libs located in ./libs/ (we can ignore ./include/ luckily).
                 sudo ln -s /usr/lib/x86_64-linux-gnu/nss/ /usr/lib/x86_64-linux-gnu/lib
             BUILD_OPTIONS: 
+
           # Linux openSSL crypto
           - OS: ubuntu-latest
             TARGET: x86_64-unknown-linux-gnu
-            # The last part is a really ugly hack, but I fail to find another way
-            ADD_INSTALL: sudo apt-get update && sudo apt-get install -y libudev-dev openssl
+            ADD_INSTALL: |
+                sudo apt-get update
+                sudo apt-get install -y libudev-dev openssl
             BUILD_OPTIONS: --features crypto_openssl --no-default-features
+
           # Mac dummy crypto
           - OS: macos-latest
             TARGET: x86_64-apple-darwin
-            BUILD_OPTIONS: --features crypto_dummy --no-default-features  --target=x86_64-apple-darwin
+            BUILD_OPTIONS: --features crypto_dummy --no-default-features --target=x86_64-apple-darwin
+
           # Windows dummy crypto
           - OS: windows-latest
             TARGET: x86_64-pc-windows-gnu
-            BUILD_OPTIONS: --features crypto_dummy --no-default-features  --target=x86_64-pc-windows-gnu
+            BUILD_OPTIONS: --features crypto_dummy --no-default-features --target=x86_64-pc-windows-gnu
 
     runs-on: ${{ matrix.OS }}
     env:
@@ -53,9 +61,7 @@ jobs:
         run: ${{ matrix.ADD_INSTALL }}
 
       - name: Build
-        run: |
-          cargo build --all --release ${{ matrix.BUILD_OPTIONS }}
+        run: cargo build --all --release ${{ matrix.BUILD_OPTIONS }}
 
       - name: Test
-        run: |
-          cargo test ${{ matrix.BUILD_OPTIONS }} -- nocapture
+        run: cargo test ${{ matrix.BUILD_OPTIONS }} -- nocapture
