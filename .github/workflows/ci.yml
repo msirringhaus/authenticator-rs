@@ -3,10 +3,11 @@ name: Build and test
 on: [push, pull_request]
 
 jobs:
-  strategy:
-    matrix:
-      # a list of all the targets
-      include:
+  build:
+    strategy:
+      matrix:
+        # List of all the targets
+        include:
           # Linux dummy crypto
           - OS: ubuntu-latest
             TARGET: x86_64-unknown-linux-gnu
@@ -32,8 +33,7 @@ jobs:
           - OS: windows-latest
             TARGET: x86_64-pc-windows-gnu
             BUILD_OPTIONS: --features crypto_dummy --no-default-features  --target=x86_64-pc-windows-gnu
-            
-  build:
+
     runs-on: ${{ matrix.OS }}
     env:
         # Setting this for all, as it's the easiest right now
@@ -43,8 +43,6 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install latest rust toolchain
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: rustup target add $TARGET
 
       - name: Install Packages
