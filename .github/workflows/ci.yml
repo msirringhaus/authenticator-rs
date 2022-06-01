@@ -16,8 +16,11 @@ jobs:
           # Linux NSS crypto
           - OS: ubuntu-latest
             TARGET: x86_64-unknown-linux-gnu
-            # The last part is a really ugly hack, but I fail to find another way
-            ADD_INSTALL: sudo apt-get update && sudo apt-get install -y libudev-dev libnss3 && sudo ln -s /usr/lib/x86_64-linux-gnu/nss/ /usr/lib/x86_64-linux-gnu/lib
+            ADD_INSTALL: |
+                sudo apt-get update
+                sudo apt-get install -y libudev-dev libnss3
+                # The last part is a really ugly hack, but I fail to find another way
+                sudo ln -s /usr/lib/x86_64-linux-gnu/nss/ /usr/lib/x86_64-linux-gnu/lib
             BUILD_OPTIONS: 
           # Linux openSSL crypto
           - OS: ubuntu-latest
