@@ -842,30 +842,21 @@ impl StateMachineCtap2 {
             callback.clone(),
             status,
             move |info, selector, status, _alive| {
-                // Can't use init_and_select here as we only need the info struct!
-                let mut dev = match Device::new(info) {
-                    Ok(dev) => dev,
-                    Err((e, id)) => {
-                        info!("error happened with device: {}", e);
-                        // selector.send(DeviceSelectorEvent::NotAToken(id)).ok()?;
+                let mut dev = match Self::init_and_select(info, &selector, false) {
+                    None => {
                         return;
                     }
+                    Some(dev) => dev,
                 };
 
-                // Try initializing it.
-                if let Err(e) = dev.init(Nonce::CreateRandom) {
-                    warn!("error while initializing device: {}", e);
-                    // selector.send(DeviceSelectorEvent::NotAToken(dev.id())).ok();
-                    return;
-                }
+                info!("Device {:?} continues with the info process", dev.id());
 
                 match dev.get_authenticator_info() {
                     None => {
-                        info!("Device does not support CTAP2");
-                        // selector.send(DeviceSelectorEvent::NotAToken(dev.id())).ok();
-                        // implicit return
+                        error!("Device does not support CTAP2, should have already been filtered out!");
                     }
                     Some(dev_info) => {
+                        info!("Device supports CTAP2");
                         let res = Ok(crate::InfoResult::CTAP2(dev_info.clone()));
                         callback.call(res);
                     }

@@ -1,13 +1,9 @@
 use clap::{Args, Subcommand};
 
 use authenticator::{
-    authenticatorservice::{
-        AuthenticatorService, CtapVersion
-    },
-    InfoResult,
-    AuthenticatorInfo,
-    StatusUpdate,
+    authenticatorservice::{AuthenticatorService, CtapVersion},
     statecallback::StateCallback,
+    AuthenticatorInfo, InfoResult, StatusUpdate,
 };
 use std::sync::mpsc::{channel, RecvError};
 use std::thread;
@@ -15,21 +11,11 @@ use std::thread;
 #[derive(Debug, Subcommand)]
 #[clap(about = "Authenticator Utility")]
 enum Opt {
-    List
+    List,
 }
 
 fn main() {
     env_logger::init();
-    // tracing_subscriber::fmt::init();
-
-    /*
-    LogTracer::init()
-        .map_err(|e| {
-            eprintln!("Well Fuck {:?}", e);
-            ()
-        })
-        .expect("Failed to setup logging facade");
-    */
 
     let timeout_ms = 25000;
 
@@ -43,15 +29,20 @@ fn main() {
     thread::spawn(move || loop {
         match status_rx.recv() {
             Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
-                println!("STATUS: device available: {}", dev_info)
+                // println!("STATUS: device available: {}", dev_info)
+            }
+            Ok(StatusUpdate::SelectDeviceNotice) => {
+                println!("STATUS: Please select a device by touching one of them.");
+            }
+            Ok(StatusUpdate::DeviceSelected(_dev_info)) => {
+                // println!("STATUS: Continuing with device: {}", dev_info);
             }
             Err(RecvError) => {
                 println!("STATUS: end");
                 return;
             }
-            _ => {
-                eprintln!("Unexpected State");
-                panic!()
+            e => {
+                eprintln!("Unexpected State {:?}", e);
             }
         }
     });
@@ -61,18 +52,18 @@ fn main() {
         register_tx.send(rv).unwrap();
     }));
 
-    if let Err(e) = manager
-        .info(timeout_ms, status_tx, callback) {
-            eprintln!("Couldn't setup info request - {:?}", e);
+    if let Err(e) = manager.info(timeout_ms, status_tx, callback) {
+        eprintln!("Couldn't setup info request - {:?}", e);
     }
 
-    let info_result = register_rx
-        .recv()
-        .expect("Problem receiving, unable to continue");
-
-    if let Ok(InfoResult::CTAP2(info)) = info_result {
-        println!("{:?}", info);
-    } else {
-        // An error occured.
+    while let Ok(info_result) = register_rx.recv() {
+        match info_result {
+            Ok(InfoResult::CTAP2(info)) => {
+                println!("{}", info);
+            }
+            Err(e) => {
+                eprintln!("An error occured: {:?}", e);
+            }
+        }
     }
 }

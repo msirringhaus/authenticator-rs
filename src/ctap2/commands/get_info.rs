@@ -160,6 +160,81 @@ impl AuthenticatorInfo {
     }
 }
 
+impl fmt::Display for AuthenticatorInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Authenticator Info")?;
+        writeln!(f, "AAGuid: {}", self.aaguid)?;
+
+        write!(f, "Supported Versions: ")?;
+        for i in &self.versions {
+            write!(f, "{}, ", i)?;
+        }
+        writeln!(f, "")?;
+
+        write!(f, "Extensions: ")?;
+        for i in &self.extensions {
+            write!(f, "{}, ", i)?;
+        }
+        writeln!(f, "")?;
+
+        // options
+
+        // pin_protocols
+
+        // max_msg_size
+
+        // max_credential_id_length
+
+        write!(f, "Transports: ")?;
+            if let Some(transports) = self.transports.as_ref() {
+                for i in transports {
+                    write!(f, "{}, ", i)?;
+                }
+            } else {
+                write!(f, "Unknown")?;
+            }
+        writeln!(f, "")?;
+
+        write!(f, "Algorithms : ")?;
+            if let Some(pk_param) = self.algorithms.as_ref() {
+                for pk in pk_param {
+                    write!(f, "{:?}, ", pk.alg)?;
+                }
+            } else {
+                write!(f, "Unknown")?;
+            }
+        writeln!(f, "")?;
+
+        writeln!(f, "PIN Change Required: {}", self.force_pin_change.unwrap_or(false))?;
+        if let Some(fv) = self.firmware_version {
+            writeln!(f, "Firmware Version: {}", fv)?;
+        } else {
+            writeln!(f, "Firmware Version: Unknown")?;
+        }
+        writeln!(f, "Maximum RP PIN Reqs: {}", self.max_rpids_for_set_min_pin_length.unwrap_or(0))?;
+
+        writeln!(f, "UserVerification Modality: 0x{:08X}", self.uvmodality.unwrap_or(0))?;
+
+        write!(f, "Certifications :")?;
+            if let Some(certs) = self.certifications.as_ref() {
+                for cert in certs {
+                    write!(f, "{}:{} ", cert.0, cert.1)?;
+                }
+            } else {
+                write!(f, "None")?;
+            }
+        writeln!(f, "")?;
+
+        if let Some(rem_rk) = self.remaining_discoverable_credentials {
+            writeln!(f, "Remaining Discoverable Credentials: {}", rem_rk)?;
+        } else {
+            writeln!(f, "Remaining Discoverable Credentials: Unknown")?;
+        }
+
+        Ok(())
+    }
+}
+
 impl<'de> Deserialize<'de> for AuthenticatorInfo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
