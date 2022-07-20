@@ -826,4 +826,43 @@ impl StateMachineCtap2 {
         );
         self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
     }
+
+    pub fn info(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::InfoResult>>,
+    ) {
+        // Abort any prior register/sign calls.
+        self.cancel();
+        let cbc = callback.clone();
+
+        let transaction = Transaction::new(
+            timeout,
+            callback.clone(),
+            status,
+            move |info, selector, status, _alive| {
+                let mut dev = match Self::init_and_select(info, &selector, false) {
+                    None => {
+                        return;
+                    }
+                    Some(dev) => dev,
+                };
+
+                info!("Device {:?} continues with the info process", dev.id());
+
+                match dev.get_authenticator_info() {
+                    None => {
+                        error!("Device does not support CTAP2, should have already been filtered out!");
+                    }
+                    Some(dev_info) => {
+                        info!("Device supports CTAP2");
+                        let res = Ok(crate::InfoResult::CTAP2(dev_info.clone()));
+                        callback.call(res);
+                    }
+                }
+            },
+        );
+        self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
+    }
 }

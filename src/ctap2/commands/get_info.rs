@@ -8,6 +8,7 @@ use serde::{
     Deserialize, Deserializer,
 };
 use serde_cbor::{de::from_slice, Value};
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Debug)]
@@ -49,7 +50,7 @@ impl RequestCtap2 for GetInfo {
 
         if input.len() > 1 {
             if status.is_ok() {
-                trace!("parsing authenticator info data: {:#04X?}", &input);
+                trace!("parsing authenticator info data: {:#04X?}", &input[1..]);
                 let authenticator_info =
                     from_slice(&input[1..]).map_err(CommandError::Deserializing)?;
                 Ok(authenticator_info)
@@ -140,12 +141,97 @@ pub struct AuthenticatorInfo {
     pub(crate) max_credential_id_length: Option<usize>,
     pub(crate) transports: Option<Vec<String>>,
     pub(crate) algorithms: Option<Vec<PublicKeyCredentialParameters>>,
-    // lots more to come
+    pub(crate) max_ser_large_blob_array: Option<u32>,
+    pub(crate) force_pin_change: Option<bool>,
+    pub(crate) min_pin_length: Option<u32>,
+    pub(crate) firmware_version: Option<u32>,
+    pub(crate) max_cred_blob_length: Option<u32>,
+    pub(crate) max_rpids_for_set_min_pin_length: Option<u32>,
+    pub(crate) preferred_platform_uv_attempts: Option<u32>,
+    pub(crate) uvmodality: Option<u32>,
+    pub(crate) certifications: Option<BTreeMap<String, u32>>,
+    pub(crate) remaining_discoverable_credentials: Option<u32>,
+    pub(crate) vendor_prototype_config_commands: Option<Vec<u32>>,
 }
 
 impl AuthenticatorInfo {
     pub fn supports_hmac_secret(&self) -> bool {
         self.extensions.contains(&"hmac-secret".to_string())
+    }
+}
+
+impl fmt::Display for AuthenticatorInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Authenticator Info")?;
+        writeln!(f, "AAGuid: {}", self.aaguid)?;
+
+        write!(f, "Supported Versions: ")?;
+        for i in &self.versions {
+            write!(f, "{}, ", i)?;
+        }
+        writeln!(f, "")?;
+
+        write!(f, "Extensions: ")?;
+        for i in &self.extensions {
+            write!(f, "{}, ", i)?;
+        }
+        writeln!(f, "")?;
+
+        // options
+
+        // pin_protocols
+
+        // max_msg_size
+
+        // max_credential_id_length
+
+        write!(f, "Transports: ")?;
+            if let Some(transports) = self.transports.as_ref() {
+                for i in transports {
+                    write!(f, "{}, ", i)?;
+                }
+            } else {
+                write!(f, "Unknown")?;
+            }
+        writeln!(f, "")?;
+
+        write!(f, "Algorithms : ")?;
+            if let Some(pk_param) = self.algorithms.as_ref() {
+                for pk in pk_param {
+                    write!(f, "{:?}, ", pk.alg)?;
+                }
+            } else {
+                write!(f, "Unknown")?;
+            }
+        writeln!(f, "")?;
+
+        writeln!(f, "PIN Change Required: {}", self.force_pin_change.unwrap_or(false))?;
+        if let Some(fv) = self.firmware_version {
+            writeln!(f, "Firmware Version: {}", fv)?;
+        } else {
+            writeln!(f, "Firmware Version: Unknown")?;
+        }
+        writeln!(f, "Maximum RP PIN Reqs: {}", self.max_rpids_for_set_min_pin_length.unwrap_or(0))?;
+
+        writeln!(f, "UserVerification Modality: 0x{:08X}", self.uvmodality.unwrap_or(0))?;
+
+        write!(f, "Certifications :")?;
+            if let Some(certs) = self.certifications.as_ref() {
+                for cert in certs {
+                    write!(f, "{}:{} ", cert.0, cert.1)?;
+                }
+            } else {
+                write!(f, "None")?;
+            }
+        writeln!(f, "")?;
+
+        if let Some(rem_rk) = self.remaining_discoverable_credentials {
+            writeln!(f, "Remaining Discoverable Credentials: {}", rem_rk)?;
+        } else {
+            writeln!(f, "Remaining Discoverable Credentials: Unknown")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -177,36 +263,55 @@ impl<'de> Deserialize<'de> for AuthenticatorInfo {
                 let mut max_credential_id_length = None;
                 let mut transports = None;
                 let mut algorithms = None;
+                let mut max_ser_large_blob_array = None;
+                let mut force_pin_change = None;
+                let mut min_pin_length = None;
+                let mut firmware_version = None;
+                let mut max_cred_blob_length = None;
+                let mut max_rpids_for_set_min_pin_length = None;
+                let mut preferred_platform_uv_attempts = None;
+                let mut uvmodality = None;
+                let mut certifications = None;
+                let mut remaining_discoverable_credentials = None;
+                let mut vendor_prototype_config_commands = None;
+
                 while let Some(key) = map.next_key()? {
                     match key {
-                        1 => {
+                        0x01 => {
+                            trace!("key 0x01");
                             if !versions.is_empty() {
                                 return Err(serde::de::Error::duplicate_field("versions"));
                             }
                             versions = map.next_value()?;
                         }
-                        2 => {
+                        0x02 => {
+                            trace!("key 0x02");
                             if !extensions.is_empty() {
                                 return Err(serde::de::Error::duplicate_field("extensions"));
                             }
                             extensions = map.next_value()?;
                         }
-                        3 => {
+                        0x03 => {
+                            trace!("key 0x03");
                             if aaguid.is_some() {
                                 return Err(serde::de::Error::duplicate_field("aaguid"));
                             }
                             aaguid = Some(map.next_value()?);
                         }
-                        4 => {
+                        0x04 => {
+                            trace!("key 0x04");
                             options = map.next_value()?;
                         }
-                        5 => {
+                        0x05 => {
+                            trace!("key 0x05");
                             max_msg_size = Some(map.next_value()?);
                         }
-                        6 => {
+                        0x06 => {
+                            trace!("key 0x06");
                             pin_protocols = map.next_value()?;
                         }
-                        7 => {
+                        0x07 => {
+                            trace!("key 0x07");
                             if max_credential_count_in_list.is_some() {
                                 return Err(serde::de::Error::duplicate_field(
                                     "max_credential_count_in_list",
@@ -214,7 +319,8 @@ impl<'de> Deserialize<'de> for AuthenticatorInfo {
                             }
                             max_credential_count_in_list = Some(map.next_value()?);
                         }
-                        8 => {
+                        0x08 => {
+                            trace!("key 0x08");
                             if max_credential_id_length.is_some() {
                                 return Err(serde::de::Error::duplicate_field(
                                     "max_credential_id_length",
@@ -222,20 +328,112 @@ impl<'de> Deserialize<'de> for AuthenticatorInfo {
                             }
                             max_credential_id_length = Some(map.next_value()?);
                         }
-                        9 => {
+                        0x09 => {
+                            trace!("key 0x09");
                             if transports.is_some() {
                                 return Err(serde::de::Error::duplicate_field("transports"));
                             }
                             transports = Some(map.next_value()?);
                         }
-                        10 => {
+                        0x0a => {
+                            trace!("key 0x0a");
                             if algorithms.is_some() {
                                 return Err(serde::de::Error::duplicate_field("algorithms"));
                             }
                             algorithms = Some(map.next_value()?);
                         }
+                        0x0b => {
+                            trace!("key 0x0b");
+                            if max_ser_large_blob_array.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "max_ser_large_blob_array",
+                                ));
+                            }
+                            max_ser_large_blob_array = Some(map.next_value()?);
+                        }
+                        0x0c => {
+                            trace!("key 0x0c");
+                            if force_pin_change.is_some() {
+                                return Err(serde::de::Error::duplicate_field("force_pin_change"));
+                            }
+                            force_pin_change = Some(map.next_value()?);
+                        }
+                        0x0d => {
+                            trace!("key 0x0d");
+                            if min_pin_length.is_some() {
+                                return Err(serde::de::Error::duplicate_field("min_pin_length"));
+                            }
+                            min_pin_length = Some(map.next_value()?);
+                        }
+                        0x0e => {
+                            trace!("key 0x0e");
+                            if firmware_version.is_some() {
+                                return Err(serde::de::Error::duplicate_field("firmware_version"));
+                            }
+                            firmware_version = Some(map.next_value()?);
+                        }
+                        0x0f => {
+                            trace!("key 0x0f");
+                            if max_cred_blob_length.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "max_cred_blob_length",
+                                ));
+                            }
+                            max_cred_blob_length = Some(map.next_value()?);
+                        }
+                        0x10 => {
+                            trace!("key 0x10");
+                            if max_rpids_for_set_min_pin_length.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "max_rpids_for_set_min_pin_length",
+                                ));
+                            }
+                            max_rpids_for_set_min_pin_length = Some(map.next_value()?);
+                        }
+                        0x11 => {
+                            trace!("key 0x11");
+                            if preferred_platform_uv_attempts.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "preferred_platform_uv_attempts",
+                                ));
+                            }
+                            preferred_platform_uv_attempts = Some(map.next_value()?);
+                        }
+                        0x12 => {
+                            trace!("key 0x12");
+                            if uvmodality.is_some() {
+                                return Err(serde::de::Error::duplicate_field("uvmodality"));
+                            }
+                            uvmodality = Some(map.next_value()?);
+                        }
+                        0x13 => {
+                            trace!("key 0x13");
+                            if certifications.is_some() {
+                                return Err(serde::de::Error::duplicate_field("certifications"));
+                            }
+                            certifications = Some(map.next_value()?);
+                        }
+                        0x14 => {
+                            trace!("key 0x14");
+                            if remaining_discoverable_credentials.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "remaining_discoverable_credentials",
+                                ));
+                            }
+                            remaining_discoverable_credentials = Some(map.next_value()?);
+                        }
+                        0x15 => {
+                            trace!("key 0x15");
+                            if vendor_prototype_config_commands.is_some() {
+                                return Err(serde::de::Error::duplicate_field(
+                                    "vendor_prototype_config_commands",
+                                ));
+                            }
+                            vendor_prototype_config_commands = Some(map.next_value()?);
+                        }
                         k => {
-                            warn!("GetInfo: unexpected key: {:?}", k);
+                            // DANGER: If we hit this it tottaly trashes parsing :(
+                            warn!("GetInfo: unsupported key: 0x{:x}", k);
                             continue;
                         }
                     }
@@ -259,6 +457,17 @@ impl<'de> Deserialize<'de> for AuthenticatorInfo {
                         max_credential_id_length,
                         transports,
                         algorithms,
+                        max_ser_large_blob_array,
+                        force_pin_change,
+                        min_pin_length,
+                        firmware_version,
+                        max_cred_blob_length,
+                        max_rpids_for_set_min_pin_length,
+                        preferred_platform_uv_attempts,
+                        uvmodality,
+                        certifications,
+                        remaining_discoverable_credentials,
+                        vendor_prototype_config_commands,
                     })
                 } else {
                     Err(M::Error::custom("No AAGuid specified".to_string()))
@@ -318,9 +527,62 @@ pub mod tests {
             max_credential_id_length: None,
             transports: None,
             algorithms: None,
+            max_ser_large_blob_array: None,
+            force_pin_change: None,
+            min_pin_length: None,
+            firmware_version: None,
+            max_cred_blob_length: None,
+            max_rpids_for_set_min_pin_length: None,
+            preferred_platform_uv_attempts: None,
+            uvmodality: None,
+            certifications: None,
+            remaining_discoverable_credentials: None,
+            vendor_prototype_config_commands: None,
         };
 
         assert_eq!(authenticator_info, expected);
+    }
+
+    pub const AUTHENTICATOR_INFO_PAYLOAD_YK_BIO_5C: [u8; 409] = [
+        0xB3, 0x01, 0x84, 0x66, 0x55, 0x32, 0x46, 0x5F, 0x56, 0x32, 0x68, 0x46, 0x49, 0x44, 0x4F,
+        0x5F, 0x32, 0x5F, 0x30, 0x6C, 0x46, 0x49, 0x44, 0x4F, 0x5F, 0x32, 0x5F, 0x31, 0x5F, 0x50,
+        0x52, 0x45, 0x68, 0x46, 0x49, 0x44, 0x4F, 0x5F, 0x32, 0x5F, 0x31, 0x02, 0x85, 0x6B, 0x63,
+        0x72, 0x65, 0x64, 0x50, 0x72, 0x6F, 0x74, 0x65, 0x63, 0x74, 0x6B, 0x68, 0x6D, 0x61, 0x63,
+        0x2D, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x6C, 0x6C, 0x61, 0x72, 0x67, 0x65, 0x42, 0x6C,
+        0x6F, 0x62, 0x4B, 0x65, 0x79, 0x68, 0x63, 0x72, 0x65, 0x64, 0x42, 0x6C, 0x6F, 0x62, 0x6C,
+        0x6D, 0x69, 0x6E, 0x50, 0x69, 0x6E, 0x4C, 0x65, 0x6E, 0x67, 0x74, 0x68, 0x03, 0x50, 0xD8,
+        0x52, 0x2D, 0x9F, 0x57, 0x5B, 0x48, 0x66, 0x88, 0xA9, 0xBA, 0x99, 0xFA, 0x02, 0xF3, 0x5B,
+        0x04, 0xB0, 0x62, 0x72, 0x6B, 0xF5, 0x62, 0x75, 0x70, 0xF5, 0x62, 0x75, 0x76, 0xF5, 0x64,
+        0x70, 0x6C, 0x61, 0x74, 0xF4, 0x67, 0x75, 0x76, 0x54, 0x6F, 0x6B, 0x65, 0x6E, 0xF5, 0x68,
+        0x61, 0x6C, 0x77, 0x61, 0x79, 0x73, 0x55, 0x76, 0xF5, 0x68, 0x63, 0x72, 0x65, 0x64, 0x4D,
+        0x67, 0x6D, 0x74, 0xF5, 0x69, 0x61, 0x75, 0x74, 0x68, 0x6E, 0x72, 0x43, 0x66, 0x67, 0xF5,
+        0x69, 0x62, 0x69, 0x6F, 0x45, 0x6E, 0x72, 0x6F, 0x6C, 0x6C, 0xF5, 0x69, 0x63, 0x6C, 0x69,
+        0x65, 0x6E, 0x74, 0x50, 0x69, 0x6E, 0xF5, 0x6A, 0x6C, 0x61, 0x72, 0x67, 0x65, 0x42, 0x6C,
+        0x6F, 0x62, 0x73, 0xF5, 0x6E, 0x70, 0x69, 0x6E, 0x55, 0x76, 0x41, 0x75, 0x74, 0x68, 0x54,
+        0x6F, 0x6B, 0x65, 0x6E, 0xF5, 0x6F, 0x73, 0x65, 0x74, 0x4D, 0x69, 0x6E, 0x50, 0x49, 0x4E,
+        0x4C, 0x65, 0x6E, 0x67, 0x74, 0x68, 0xF5, 0x70, 0x6D, 0x61, 0x6B, 0x65, 0x43, 0x72, 0x65,
+        0x64, 0x55, 0x76, 0x4E, 0x6F, 0x74, 0x52, 0x71, 0x64, 0xF4, 0x75, 0x63, 0x72, 0x65, 0x64,
+        0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x4D, 0x67, 0x6D, 0x74, 0x50, 0x72, 0x65, 0x76, 0x69,
+        0x65, 0x77, 0xF5, 0x78, 0x1B, 0x75, 0x73, 0x65, 0x72, 0x56, 0x65, 0x72, 0x69, 0x66, 0x69,
+        0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x4D, 0x67, 0x6D, 0x74, 0x50, 0x72, 0x65, 0x76, 0x69,
+        0x65, 0x77, 0xF5, 0x05, 0x19, 0x04, 0xB0, 0x06, 0x82, 0x02, 0x01, 0x07, 0x08, 0x08, 0x18,
+        0x80, 0x09, 0x81, 0x63, 0x75, 0x73, 0x62, 0x0A, 0x82, 0xA2, 0x63, 0x61, 0x6C, 0x67, 0x26,
+        0x64, 0x74, 0x79, 0x70, 0x65, 0x6A, 0x70, 0x75, 0x62, 0x6C, 0x69, 0x63, 0x2D, 0x6B, 0x65,
+        0x79, 0xA2, 0x63, 0x61, 0x6C, 0x67, 0x27, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6A, 0x70, 0x75,
+        0x62, 0x6C, 0x69, 0x63, 0x2D, 0x6B, 0x65, 0x79, 0x0B, 0x19, 0x04, 0x00, 0x0C, 0xF4, 0x0D,
+        0x04, 0x0E, 0x1A, 0x00, 0x05, 0x05, 0x06, 0x0F, 0x18, 0x20, 0x10, 0x01, 0x11, 0x03, 0x12,
+        0x02, 0x14, 0x18, 0x18,
+    ];
+
+    #[test]
+    fn parse_authenticator_info_yk_bio_5c() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        error!("Logs are alive!");
+
+        let authenticator_info: AuthenticatorInfo =
+            from_slice(&AUTHENTICATOR_INFO_PAYLOAD_YK_BIO_5C).unwrap();
+
+        debug!("{:?}", authenticator_info);
     }
 
     #[test]
@@ -400,6 +662,17 @@ pub mod tests {
             max_credential_id_length: None,
             transports: None,
             algorithms: None,
+            max_ser_large_blob_array: None,
+            force_pin_change: None,
+            min_pin_length: None,
+            firmware_version: None,
+            max_cred_blob_length: None,
+            max_rpids_for_set_min_pin_length: None,
+            preferred_platform_uv_attempts: None,
+            uvmodality: None,
+            certifications: None,
+            remaining_discoverable_credentials: None,
+            vendor_prototype_config_commands: None,
         };
 
         assert_eq!(result, &expected);
