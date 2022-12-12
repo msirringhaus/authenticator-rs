@@ -120,7 +120,7 @@ pub trait FidoDevice: HIDDevice {
         msg: &'msg Req,
     ) -> Result<Req::Output, HIDError> {
         debug!("sending {:?} to {:?}", msg, self);
-        let data = msg.ctap1_format(self)?;
+        let (data, add_info) = msg.ctap1_format(self)?;
 
         loop {
             let (cmd, mut data) = self.sendrecv(HIDCmd::Msg, &data)?;
@@ -139,7 +139,7 @@ pub trait FidoDevice: HIDDevice {
                 // This will bubble up error if status != no error
                 let status = ApduErrorStatus::from([status[0], status[1]]);
 
-                match msg.handle_response_ctap1(status, &data) {
+                match msg.handle_response_ctap1(status, &data, &add_info) {
                     Ok(out) => return Ok(out),
                     Err(Retryable::Retry) => {
                         // sleep 100ms then loop again

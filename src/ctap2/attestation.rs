@@ -5,7 +5,7 @@ use crate::ctap2::server::RpIdHash;
 use crate::{crypto::COSEKey, errors::AuthenticatorError};
 use nom::{
     bytes::complete::take,
-    combinator::{cond, map},
+    combinator::{cond, map, opt},
     error::Error as NomError,
     number::complete::{be_u16, be_u32, be_u8},
     Err as NomErr, IResult,
@@ -189,7 +189,7 @@ fn parse_attested_cred_data<'a>(
         (AttestedCredentialData {
             aaguid,
             credential_id,
-            credential_public_key: credential_public_key,
+            credential_public_key,
         }),
     ))
 }
@@ -220,10 +220,7 @@ fn parse_ad<'a>(input: &'a [u8]) -> IResult<&'a [u8], AuthenticatorData, NomErro
     // AuthenticatorDataFlags, just truncate the one we don't know
     let (rest, flags) = map(be_u8, AuthenticatorDataFlags::from_bits_truncate)(rest)?;
     let (rest, counter) = be_u32(rest)?;
-    let (rest, credential_data) = cond(
-        flags.contains(AuthenticatorDataFlags::ATTESTED),
-        parse_attested_cred_data,
-    )(rest)?;
+    let (rest, credential_data) = opt(parse_attested_cred_data)(rest)?;
     let (rest, extensions) = cond(
         flags.contains(AuthenticatorDataFlags::EXTENSION_DATA),
         parse_extensions,
