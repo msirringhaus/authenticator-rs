@@ -68,9 +68,9 @@ jobs:
         run: ${{ matrix.ADD_INSTALL }}
 
       - name: Build
-        use-cross: ${{ matrix.USE_CROSS }}
+        # use-cross: ${{ matrix.USE_CROSS }}
         run: cargo build --target ${{ matrix.TARGET }} --all --release ${{ matrix.BUILD_OPTIONS }}
 
       - name: Test
-        use-cross: ${{ matrix.USE_CROSS }}
+        # use-cross: ${{ matrix.USE_CROSS }}
         run: cargo test --target ${{ matrix.TARGET }} ${{ matrix.BUILD_OPTIONS }} -- --show-output
