@@ -9,7 +9,6 @@ jobs:
         include:
           # Linux dummy crypto
           - OS: ubuntu-latest
-            USE_CROSS: false
             TARGET: x86_64-unknown-linux-gnu
             ADD_INSTALL: |
                 sudo apt-get update
@@ -18,7 +17,6 @@ jobs:
 
           # Linux NSS crypto
           - OS: ubuntu-latest
-            USE_CROSS: false
             TARGET: x86_64-unknown-linux-gnu
             ADD_INSTALL: |
                 sudo apt-get update
@@ -27,7 +25,6 @@ jobs:
 
           # Linux openSSL crypto
           - OS: ubuntu-latest
-            USE_CROSS: false
             TARGET: x86_64-unknown-linux-gnu
             ADD_INSTALL: |
                 sudo apt-get update
@@ -36,20 +33,33 @@ jobs:
 
           # Mac dummy crypto
           - OS: macos-latest
-            USE_CROSS: false
             TARGET: x86_64-apple-darwin
             BUILD_OPTIONS: --features crypto_dummy --no-default-features --target=x86_64-apple-darwin
 
           # Windows dummy crypto
           - OS: windows-latest
-            USE_CROSS: false
             TARGET: x86_64-pc-windows-gnu
             BUILD_OPTIONS: --features crypto_dummy --no-default-features --target=x86_64-pc-windows-gnu
 
           # FreeBSD - cross compile
+          # - OS: ubuntu-latest
+          #   TARGET: x86_64-unknown-freebsd
+          #   ADD_INSTALL: |
+          #       sudo apt-get update
+          #       sudo apt-get install -y libudev-dev
+          #   BUILD_OPTIONS: --features crypto_dummy --no-default-features
+
+          # # netBSD - cross compile
+          # - OS: ubuntu-latest
+          #   TARGET: x86_64-unknown-netbsd
+          #   ADD_INSTALL: |
+          #       sudo apt-get update
+          #       sudo apt-get install -y libudev-dev
+          #   BUILD_OPTIONS: --features crypto_dummy --no-default-features
+
+          # openBSD - cross compile
           - OS: ubuntu-latest
-            TARGET: x86_64-unknown-freebsd
-            USE_CROSS: true
+            TARGET: x86_64-unknown-openbsd
             ADD_INSTALL: |
                 sudo apt-get update
                 sudo apt-get install -y libudev-dev
