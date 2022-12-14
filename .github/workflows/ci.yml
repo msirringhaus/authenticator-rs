@@ -49,17 +49,9 @@ jobs:
           #       sudo apt-get install -y libudev-dev
           #   BUILD_OPTIONS: --features crypto_dummy --no-default-features
 
-          # # netBSD - cross compile
-          # - OS: ubuntu-latest
-          #   TARGET: x86_64-unknown-netbsd
-          #   ADD_INSTALL: |
-          #       sudo apt-get update
-          #       sudo apt-get install -y libudev-dev
-          #   BUILD_OPTIONS: --features crypto_dummy --no-default-features
-
-          # openBSD - cross compile
+          # netBSD - cross compile
           - OS: ubuntu-latest
-            TARGET: x86_64-unknown-openbsd
+            TARGET: x86_64-unknown-netbsd
             ADD_INSTALL: |
                 sudo apt-get update
                 sudo apt-get install -y libudev-dev
