@@ -47,13 +47,13 @@ jobs:
             BUILD_OPTIONS: --features crypto_dummy --no-default-features --target=x86_64-pc-windows-gnu
 
           # FreeBSD - cross compile
-          # - OS: ubuntu-latest
-          #   TARGET: x86_64-unknown-freebsd
-          #  NATIVE_BUILD: false
-          #   ADD_INSTALL: |
-          #       sudo apt-get update
-          #       sudo apt-get install -y libudev-dev
-          #   BUILD_OPTIONS: --features crypto_dummy --no-default-features
+          - OS: ubuntu-latest
+            TARGET: x86_64-unknown-freebsd
+            NATIVE_BUILD: false
+            ADD_INSTALL: |
+                sudo apt-get update
+                sudo apt-get install -y libudev-dev
+            BUILD_OPTIONS: --features crypto_dummy --no-default-features
 
           # netBSD - cross compile
           - OS: ubuntu-latest
