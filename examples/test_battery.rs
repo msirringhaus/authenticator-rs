@@ -37,7 +37,7 @@ macro_rules! extract {
     };
 }
 
-const PIN: &'static str = "1234";
+const PIN: &str = "1234";
 
 fn print_usage(program: &str, opts: Options) {
     println!("------------------------------------------------------------------------");
@@ -56,7 +56,7 @@ fn main() {
     let tests: Vec<_> = if tests_str.is_empty() {
         Vec::new()
     } else {
-        tests_str.split(',').to_owned().into_iter().collect()
+        tests_str.split(',').collect()
     };
 
     println!("------------------------------------------------------------------------");
@@ -187,7 +187,7 @@ fn test_ctap2_code_additional_pin_tests() {
     }));
 
     manager
-        .register(timeout_ms, args.clone().into(), status_tx.clone(), callback)
+        .register(timeout_ms, args.into(), status_tx, callback)
         .expect("Couldn't register");
 
     assert!(matches!(
@@ -241,7 +241,7 @@ fn test_ctap2_multiple_tokens() {
     }));
 
     manager
-        .register(timeout_ms, args.clone().into(), status_tx.clone(), callback)
+        .register(timeout_ms, args.into(), status_tx, callback)
         .expect("Couldn't register");
 
     for _ in [0, 1] {
@@ -287,7 +287,7 @@ fn test_ctap2_register_multiple(
 
     // Register 3 different users
     let mut key_handles = Vec::new();
-    for username in vec!["A. User", "A. Nother", "Dr. Who"] {
+    for username in &["A. User", "A. Nother", "Dr. Who"] {
         let mut args = register_args_ctap2("https://multiregister-example.com", username);
         args.options.resident_key = resident_key;
 
@@ -324,9 +324,9 @@ fn test_ctap2_register_exclude_list(
     println!("Test 1: Ok");
 
     // Test 2 - Register with already registered key-handle in the ExcludeList
-    let registered_key_handle = a.auth_data.credential_data.unwrap().credential_id.clone();
+    let registered_key_handle = a.auth_data.credential_data.unwrap().credential_id;
     args.exclude_list = vec![PublicKeyCredentialDescriptor {
-        id: registered_key_handle.clone(),
+        id: registered_key_handle,
         transports: vec![Transport::USB],
     }];
     let res = ctap2_register(&mut manager, &args, timeout_ms, &status_tx);
@@ -370,8 +370,8 @@ fn test_sign_raw_result(
 
     // Test 1 - Normal sign with AllowList
     let args = sign_args_ctap2(origin, key_handles);
-    let res = ctap2_sign(&mut manager, &args, timeout_ms, &status_tx);
-    res
+
+    ctap2_sign(&mut manager, &args, timeout_ms, &status_tx)
 }
 
 fn test_ctap2_sign_allow_list(
@@ -499,12 +499,12 @@ fn set_pin() {
     let (mut manager, timeout_ms) = parse_args_and_setup(CtapVersion::CTAP2);
     let status_tx = spawn_normal_status_update_channels(None);
     let (reset_tx, reset_rx) = channel();
-    let rs_tx = reset_tx.clone();
+    let rs_tx = reset_tx;
     let callback = StateCallback::new(Box::new(move |rv| {
         let _ = rs_tx.send(rv);
     }));
 
-    if let Err(e) = manager.set_pin(timeout_ms, Pin::new(PIN), status_tx.clone(), callback) {
+    if let Err(e) = manager.set_pin(timeout_ms, Pin::new(PIN), status_tx, callback) {
         panic!("Couldn't call set_pin: {:?}", e);
     };
 
@@ -541,7 +541,7 @@ fn spawn_normal_status_update_channels(pin: Option<&'static str>) -> Sender<Stat
             Ok(StatusUpdate::PinError(error, sender)) => match error {
                 PinError::PinRequired => {
                     if let Some(pin) = pin {
-                        sender.send(Pin::new(&pin)).expect("Failed to send PIN");
+                        sender.send(Pin::new(pin)).expect("Failed to send PIN");
                     } else {
                         panic!("Was asked for PIN, but should not have been asked!");
                     }
@@ -550,7 +550,7 @@ fn spawn_normal_status_update_channels(pin: Option<&'static str>) -> Sender<Stat
                 PinError::InvalidPin(attempts) => {
                     panic!(
                         "PIN was not accepted! (Your token has {} attempts left).",
-                        attempts.map_or(format!("unkown"), |a| format!(
+                        attempts.map_or("unkown".to_string(), |a| format!(
                             "You have {} attempts left.",
                             a
                         ))
@@ -595,10 +595,9 @@ fn ctap2_register(
         panic!("Couldn't register: {:?}", e);
     };
 
-    let register_result = register_rx
+    register_rx
         .recv()
-        .expect("Problem receiving, unable to continue");
-    register_result
+        .expect("Problem receiving, unable to continue")
 }
 
 fn ctap2_sign(
@@ -622,10 +621,9 @@ fn ctap2_sign(
         panic!("Couldn't sign: {:?}", e);
     }
 
-    let sign_result = sign_rx
+    sign_rx
         .recv()
-        .expect("Problem receiving, unable to continue");
-    sign_result
+        .expect("Problem receiving, unable to continue")
 }
 
 fn generate_challenge() -> Vec<u8> {
@@ -653,7 +651,7 @@ fn register_args_ctap2(origin: &str, username: &str) -> RegisterArgsCtap2 {
     };
 
     RegisterArgsCtap2 {
-        challenge: chall_bytes.clone(),
+        challenge: chall_bytes,
         relying_party: RelyingParty {
             // Removing https://
             id: origin[8..].to_string(),
@@ -661,7 +659,7 @@ fn register_args_ctap2(origin: &str, username: &str) -> RegisterArgsCtap2 {
             icon: None,
         },
         origin: origin.to_string(),
-        user: user.clone(),
+        user,
         pub_cred_params: vec![
             PublicKeyCredentialParameters {
                 alg: COSEAlgorithm::ES256,

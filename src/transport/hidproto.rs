@@ -186,7 +186,7 @@ pub fn read_hid_rpt_sizes(desc: ReportDescriptor) -> io::Result<(usize, usize)> 
     for data in desc.iter() {
         match data {
             Data::ReportCount { data } => {
-                if last_rpt_count != None {
+                if last_rpt_count.is_some() {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Duplicate HID_ReportCount",
