@@ -62,6 +62,11 @@ enum QueueAction {
         status: Sender<crate::StatusUpdate>,
         callback: StateCallback<crate::Result<crate::ResetResult>>,
     },
+    InteractiveManagement {
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ResetResult>>,
+    },
 }
 
 pub struct U2FManager {
@@ -257,6 +262,18 @@ impl AuthenticatorTransport for U2FManager {
             callback,
         })?)
     }
+    fn manage(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ResetResult>>,
+    ) -> Result<(), AuthenticatorError> {
+        Ok(self.tx.send(QueueAction::InteractiveManagement {
+            timeout,
+            status,
+            callback,
+        })?)
+    }
 }
 
 impl Drop for U2FManager {
@@ -323,6 +340,15 @@ impl Manager {
                     }) => {
                         // This must not block, otherwise we can't cancel.
                         sm.set_pin(timeout, new_pin, status, callback);
+                    }
+
+                    Ok(QueueAction::InteractiveManagement {
+                        timeout,
+                        status,
+                        callback,
+                    }) => {
+                        // Manage token interactively
+                        sm.manage(timeout, status, callback);
                     }
 
                     Ok(QueueAction::RegisterCtap1 {
@@ -571,6 +597,19 @@ impl AuthenticatorTransport for Manager {
         Ok(self.tx.send(QueueAction::SetPin {
             timeout,
             new_pin,
+            status,
+            callback,
+        })?)
+    }
+
+    fn manage(
+        &mut self,
+        timeout: u64,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ResetResult>>,
+    ) -> Result<(), AuthenticatorError> {
+        Ok(self.tx.send(QueueAction::InteractiveManagement {
+            timeout,
             status,
             callback,
         })?)

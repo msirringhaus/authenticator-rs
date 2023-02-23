@@ -1,9 +1,17 @@
 use super::{u2ftypes, Pin};
+use crate::ctap2::commands::get_info::AuthenticatorInfo;
 use serde::{
     ser::{Serialize, SerializeStruct},
-    Serialize as DeriveSer, Serializer,
+    Deserialize, Serialize as DeriveSer, Serializer,
 };
 use std::sync::mpsc::Sender;
+
+#[derive(Debug, Deserialize, DeriveSer)]
+pub enum InteractiveRequest {
+    Reset,
+    ChangePIN(Pin, Pin),
+    SetPIN(Pin),
+}
 
 // Simply ignoring the Sender when serializing
 pub(crate) fn serialize_pin_required<S>(_: &Sender<Pin>, s: S) -> Result<S::Ok, S::Error>
@@ -64,6 +72,14 @@ pub enum StatusUpdate {
     /// Sent, once a device was selected (either automatically or by user-interaction)
     /// and the register or signing process continues with this device
     DeviceSelected(u2ftypes::U2FDeviceInfo),
+    /// Sent when a token was selected for interactive management
+    InteractiveManagement(
+        (
+            Sender<InteractiveRequest>,
+            u2ftypes::U2FDeviceInfo,
+            Option<AuthenticatorInfo>,
+        ),
+    ),
 }
 
 impl Serialize for StatusUpdate {
@@ -84,6 +100,9 @@ impl Serialize for StatusUpdate {
             StatusUpdate::SelectDeviceNotice => map.serialize_field("SelectDeviceNotice", &())?,
             StatusUpdate::DeviceSelected(dev_info) => {
                 map.serialize_field("DeviceSelected", &dev_info)?
+            }
+            StatusUpdate::InteractiveManagement((_, dev_info, _auth_info)) => {
+                map.serialize_field("InteractiveManagement", &dev_info)?
             }
         }
         map.end()
