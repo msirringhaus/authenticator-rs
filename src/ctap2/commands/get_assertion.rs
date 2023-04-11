@@ -236,8 +236,12 @@ impl PinUvAuthCommand for GetAssertion {
         self.options.user_verification
     }
 
-    fn get_rp(&self) -> &RelyingPartyWrapper {
-        &self.rp
+    fn get_rp_id(&self) -> Option<&String> {
+        match &self.rp {
+            // CTAP1 case: We only have the hash, not the entire RpID
+            RelyingPartyWrapper::Hash(..) => None,
+            RelyingPartyWrapper::Data(r) => Some(&r.id),
+        }
     }
 
     fn can_skip_user_verification(

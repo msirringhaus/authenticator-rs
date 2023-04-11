@@ -1,4 +1,3 @@
-use super::server::RelyingPartyWrapper;
 use crate::crypto::{CryptoError, PinUvAuthParam, PinUvAuthToken};
 use crate::ctap2::commands::client_pin::{GetPinRetries, GetUvRetries, Pin, PinError};
 use crate::ctap2::commands::get_info::AuthenticatorInfo;
@@ -12,6 +11,7 @@ use std::error::Error as StdErrorT;
 use std::fmt;
 use std::io::{Read, Write};
 
+pub mod authenticator_config;
 pub(crate) mod client_pin;
 pub(crate) mod get_assertion;
 pub(crate) mod get_info;
@@ -24,8 +24,6 @@ pub(crate) mod selection;
 pub trait Request<T>
 where
     Self: fmt::Debug,
-    Self: RequestCtap1<Output = T>,
-    Self: RequestCtap2<Output = T>,
 {
 }
 
@@ -139,7 +137,7 @@ pub(crate) trait PinUvAuthCommand: RequestCtap2 {
     fn get_pin_uv_auth_param(&self) -> Option<&PinUvAuthParam>;
     fn set_uv_option(&mut self, uv: Option<bool>);
     fn get_uv_option(&mut self) -> Option<bool>;
-    fn get_rp(&self) -> &RelyingPartyWrapper;
+    fn get_rp_id(&self) -> Option<&String>;
     fn can_skip_user_verification(
         &mut self,
         info: &AuthenticatorInfo,
@@ -199,6 +197,7 @@ pub enum Command {
     Reset = 0x07,
     GetNextAssertion = 0x08,
     Selection = 0x0B,
+    AuthenticatorConfig = 0x0D,
 }
 
 impl Command {
