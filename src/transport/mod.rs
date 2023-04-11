@@ -79,7 +79,13 @@ pub enum Nonce {
 // TODO(MS): This is the lazy way: FidoDevice currently only extends HIDDevice by more functions,
 //           but the goal is to remove U2FDevice entirely and copy over the trait-definition here
 pub trait FidoDevice: HIDDevice {
-    fn send_msg<Out, Req: Request<Out>>(&mut self, msg: &Req) -> Result<Out, HIDError> {
+    fn send_msg<
+        Out,
+        Req: Request<Out> + RequestCtap1<Output = Out> + RequestCtap2<Output = Out>,
+    >(
+        &mut self,
+        msg: &Req,
+    ) -> Result<Out, HIDError> {
         self.send_msg_cancellable(msg, &|| true)
     }
 
@@ -91,7 +97,10 @@ pub trait FidoDevice: HIDDevice {
         self.send_ctap1_cancellable(msg, &|| true)
     }
 
-    fn send_msg_cancellable<Out, Req: Request<Out>>(
+    fn send_msg_cancellable<
+        Out,
+        Req: Request<Out> + RequestCtap1<Output = Out> + RequestCtap2<Output = Out>,
+    >(
         &mut self,
         msg: &Req,
         keep_alive: &dyn Fn() -> bool,

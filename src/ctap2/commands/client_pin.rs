@@ -35,6 +35,7 @@ pub enum PINSubcommand {
 
 bitflags! {
     pub struct PinUvAuthTokenPermission: u8 {
+        const SkipPermissions = 0x00;               // skip serializing
         const MakeCredential = 0x01;             // rp_id required
         const GetAssertion = 0x02;               // rp_id required
         const CredentialManagement = 0x04;       // rp_id optional
@@ -358,7 +359,11 @@ impl<'sc, 'pin> ClientPINSubCommand for GetPinUvAuthTokenUsingPinWithPermissions
             subcommand: PINSubcommand::GetPinUvAuthTokenUsingPinWithPermissions,
             key_agreement: Some(self.shared_secret.client_input().clone()),
             pin_hash_enc: Some(ByteBuf::from(pin_hash_enc)),
-            permissions: Some(self.permissions.bits()),
+            permissions: if self.permissions == PinUvAuthTokenPermission::SkipPermissions {
+                None
+            } else {
+                Some(self.permissions.bits())
+            },
             rp_id: self.rp_id.clone(), /* TODO: This could probably be done less wasteful with
                                         * &str all the way */
             ..ClientPIN::default()
@@ -454,7 +459,11 @@ impl<'sc> ClientPINSubCommand for GetPinUvAuthTokenUsingUvWithPermissions<'sc> {
             pin_protocol: Some(self.shared_secret.pin_protocol.clone()),
             subcommand: PINSubcommand::GetPinUvAuthTokenUsingUvWithPermissions,
             key_agreement: Some(self.shared_secret.client_input().clone()),
-            permissions: Some(self.permissions.bits()),
+            permissions: if self.permissions == PinUvAuthTokenPermission::SkipPermissions {
+                None
+            } else {
+                Some(self.permissions.bits())
+            },
             rp_id: self.rp_id.clone(), /* TODO: This could probably be done less wasteful with
                                         * &str all the way */
             ..ClientPIN::default()

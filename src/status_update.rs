@@ -1,5 +1,7 @@
 use super::{u2ftypes, Pin};
-use crate::ctap2::commands::get_info::AuthenticatorInfo;
+use crate::ctap2::commands::{
+    authenticator_config::AuthConfigCommand, get_info::AuthenticatorInfo,
+};
 use serde::{
     ser::{Serialize, SerializeStruct},
     Deserialize, Serialize as DeriveSer, Serializer,
@@ -11,6 +13,7 @@ pub enum InteractiveRequest {
     Reset,
     ChangePIN(Pin, Pin),
     SetPIN(Pin),
+    ChangeConfig(AuthConfigCommand),
 }
 
 // Simply ignoring the Sender when serializing

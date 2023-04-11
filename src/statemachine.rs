@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use crate::consts::PARAMETER_SIZE;
+use crate::ctap2::commands::authenticator_config::{AuthConfigCommand, AuthenticatorConfig};
 use crate::ctap2::commands::client_pin::{
     ChangeExistingPin, Pin, PinError, PinUvAuthTokenPermission, SetNewPin,
 };
@@ -493,10 +494,6 @@ impl StateMachineCtap2 {
 
         let pin_auth_token = pin_auth_token.map_err(|e| repackage_pin_errors(dev, e))?;
         cmd.set_pin_uv_auth_param(Some(pin_auth_token))?;
-        // CTAP 2.0 spec is a bit vague here, but CTAP 2.1 is very specific, that the request
-        // should either include pinAuth OR uv=true, but not both at the same time.
-        // Do not set user_verification, if pinAuth is provided
-        cmd.set_uv_option(None);
         Ok(res)
     }
 
@@ -530,8 +527,7 @@ impl StateMachineCtap2 {
         }
 
         // TODO: API needs a better way to express "uv = discouraged"
-        if cmd.get_uv_option() == Some(false) {
-            cmd.set_discouraged_uv_option();
+        if cmd.handle_discouraged_uv_option() {
             return Ok(PinUvAuthResult::NoAuthRequired);
         }
 
@@ -1137,6 +1133,102 @@ impl StateMachineCtap2 {
         self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
     }
 
+    pub fn configure_authenticator(
+        dev: &mut Device,
+        cfg_subcommand: AuthConfigCommand,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ResetResult>>,
+        alive: &dyn Fn() -> bool,
+    ) {
+        let mut authcfg = AuthenticatorConfig::new(cfg_subcommand);
+        let mut skip_uv = false;
+        let authinfo = match dev.get_authenticator_info() {
+            Some(i) => i.clone(),
+            None => {
+                callback.call(Err(HIDError::DeviceNotInitialized.into()));
+                return;
+            }
+        };
+
+        // We can use the AuthenticatorConfiguration-command only in two cases:
+        // 1. The device also supports the uv_acfg-permission (otherwise we can't establish a PUAP)
+        // 2. The device is NOT protected by PIN/UV (yet). This allows organizations to configure
+        //    the token, before handing them out.
+        let permissions = if authinfo.options.uv_acfg == Some(true) {
+            PinUvAuthTokenPermission::AuthenticatorConfiguration
+        } else {
+            PinUvAuthTokenPermission::SkipPermissions
+        };
+
+        while alive() {
+            let pin_uv_auth_result = match Self::determine_puap_if_needed(
+                &mut authcfg,
+                dev,
+                skip_uv,
+                permissions,
+                &status,
+                &callback,
+                alive,
+            ) {
+                Ok(r) => r,
+                Err(()) => {
+                    return;
+                }
+            };
+
+            debug!("------------------------------------------------------------------");
+            debug!("{authcfg:?} using {pin_uv_auth_result:?}");
+            debug!("------------------------------------------------------------------");
+
+            let resp = dev.send_cbor_cancellable(&authcfg, alive);
+            match resp {
+                Ok(()) => {
+                    callback.call(Ok(()));
+                    break;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {
+                    // Channel busy. Client SHOULD retry the request after a short delay.
+                    thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(
+                    StatusCode::OperationDenied,
+                    _,
+                ))) if pin_uv_auth_result == PinUvAuthResult::UsingInternalUv => {
+                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                    // (e.g. wrong fingerprint used), while doing GetAssertion
+                    // Yes, this is a different error code than for MakeCredential.
+                    send_status(
+                        &status,
+                        StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
+                    );
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::PinRequired, _)))
+                    if pin_uv_auth_result == PinUvAuthResult::UsingInternalUv =>
+                {
+                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                    // repeatedly, so that we have to fall back to PINs
+                    skip_uv = true;
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::UvBlocked, _)))
+                    if pin_uv_auth_result
+                        == PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions =>
+                {
+                    // This should only happen for CTAP2.1 tokens that use internal UV and failed
+                    // repeatedly, so that we have to fall back to PINs
+                    skip_uv = true;
+                    continue;
+                }
+                Err(e) => {
+                    warn!("error happened: {e}");
+                    callback.call(Err(AuthenticatorError::HIDError(e)));
+                    break;
+                }
+            }
+        }
+    }
     // Function to interactively manage a specific token.
     // Difference to register/sign: These want to do something and don't care
     // with which token they do it.
@@ -1203,6 +1295,15 @@ impl StateMachineCtap2 {
                                 callback.clone(),
                                 alive,
                             );
+                        }
+                        Ok(InteractiveRequest::ChangeConfig(authcfg)) => {
+                            Self::configure_authenticator(
+                                &mut dev,
+                                authcfg,
+                                status,
+                                callback.clone(),
+                                alive,
+                            )
                         }
                         Err(RecvTimeoutError::Timeout) => {
                             if !alive() {

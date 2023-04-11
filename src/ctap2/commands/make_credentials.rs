@@ -140,17 +140,13 @@ impl MakeCredentials {
             enterprise_attestation: None,
         })
     }
+
+    fn client_data_hash(&self) -> ClientDataHash {
+        self.client_data_wrapper.hash()
+    }
 }
 
 impl PinUvAuthCommand for MakeCredentials {
-    fn pin(&self) -> &Option<Pin> {
-        &self.pin
-    }
-
-    fn set_pin(&mut self, pin: Option<Pin>) {
-        self.pin = pin;
-    }
-
     fn set_pin_uv_auth_param(
         &mut self,
         pin_uv_auth_token: Option<PinUvAuthToken>,
@@ -164,19 +160,19 @@ impl PinUvAuthCommand for MakeCredentials {
             );
         }
         self.pin_uv_auth_param = param;
+        // CTAP 2.0 spec is a bit vague here, but CTAP 2.1 is very specific, that the request
+        // should either include pinAuth OR uv=true, but not both at the same time.
+        // Do not set user_verification, if pinAuth is provided
+        self.options.user_verification = None;
         Ok(())
     }
 
-    fn client_data_hash(&self) -> ClientDataHash {
-        self.client_data_wrapper.hash()
+    fn pin(&self) -> &Option<Pin> {
+        &self.pin
     }
 
-    fn set_uv_option(&mut self, uv: Option<bool>) {
-        self.options.user_verification = uv;
-    }
-
-    fn get_uv_option(&mut self) -> Option<bool> {
-        self.options.user_verification
+    fn set_pin(&mut self, pin: Option<Pin>) {
+        self.pin = pin;
     }
 
     fn get_rp_id(&self) -> Option<&String> {
@@ -187,15 +183,19 @@ impl PinUvAuthCommand for MakeCredentials {
         }
     }
 
-    fn set_discouraged_uv_option(&mut self) {
-        // "[..] the Relying Party wants to create a non-discoverable credential and not require user verification
-        // (e.g., by setting options.authenticatorSelection.userVerification to "discouraged" in the WebAuthn API),
-        // the platform invokes the authenticatorMakeCredential operation using the marshalled input parameters along
-        // with the "uv" option key set to false and terminate these steps."
-        // Note: This is basically a no-op right now, since we use `get_uv_option() == Some(false)`, to determine if
-        //       the RP is discouraging UV. But we may change that part of the API in the future, so better to be
-        //       explicit here.
-        self.set_uv_option(Some(false))
+    fn handle_discouraged_uv_option(&mut self) -> bool {
+        if self.options.user_verification == Some(false) {
+            // "[..] the Relying Party wants to create a non-discoverable credential and not require user verification
+            // (e.g., by setting options.authenticatorSelection.userVerification to "discouraged" in the WebAuthn API),
+            // the platform invokes the authenticatorMakeCredential operation using the marshalled input parameters along
+            // with the "uv" option key set to false and terminate these steps."
+            // Note: This is a no-op right now, since we use `get_uv_option() == Some(false)`, to determine if
+            //       the RP is discouraging UV. But we may change that part of the API in the future, so better to be
+            //       explicit here.
+            self.options.user_verification = Some(false);
+            return true;
+        }
+        false
     }
 }
 

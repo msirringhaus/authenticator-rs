@@ -204,17 +204,13 @@ impl GetAssertion {
             alternate_rp_id,
         })
     }
+
+    fn client_data_hash(&self) -> ClientDataHash {
+        self.client_data_wrapper.hash()
+    }
 }
 
 impl PinUvAuthCommand for GetAssertion {
-    fn pin(&self) -> &Option<Pin> {
-        &self.pin
-    }
-
-    fn set_pin(&mut self, pin: Option<Pin>) {
-        self.pin = pin;
-    }
-
     fn set_pin_uv_auth_param(
         &mut self,
         pin_uv_auth_token: Option<PinUvAuthToken>,
@@ -228,19 +224,19 @@ impl PinUvAuthCommand for GetAssertion {
             );
         }
         self.pin_uv_auth_param = param;
+        // CTAP 2.0 spec is a bit vague here, but CTAP 2.1 is very specific, that the request
+        // should either include pinAuth OR uv=true, but not both at the same time.
+        // Do not set user_verification, if pinAuth is provided
+        self.options.user_verification = None;
         Ok(())
     }
 
-    fn client_data_hash(&self) -> ClientDataHash {
-        self.client_data_wrapper.hash()
+    fn pin(&self) -> &Option<Pin> {
+        &self.pin
     }
 
-    fn set_uv_option(&mut self, uv: Option<bool>) {
-        self.options.user_verification = uv;
-    }
-
-    fn get_uv_option(&mut self) -> Option<bool> {
-        self.options.user_verification
+    fn set_pin(&mut self, pin: Option<Pin>) {
+        self.pin = pin;
     }
 
     fn get_rp_id(&self) -> Option<&String> {
@@ -251,11 +247,15 @@ impl PinUvAuthCommand for GetAssertion {
         }
     }
 
-    fn set_discouraged_uv_option(&mut self) {
-        // "[..] the Relying Party does not wish to require user verification (e.g., by setting options.userVerification
-        // to "discouraged" in the WebAuthn API), the platform invokes the authenticatorGetAssertion operation using
-        // the marshalled input parameters along with an absent "uv" option key."
-        self.set_uv_option(None);
+    fn handle_discouraged_uv_option(&mut self) -> bool {
+        if self.options.user_verification == Some(true) {
+            // "[..] the Relying Party does not wish to require user verification (e.g., by setting options.userVerification
+            // to "discouraged" in the WebAuthn API), the platform invokes the authenticatorGetAssertion operation using
+            // the marshalled input parameters along with an absent "uv" option key."
+            self.options.user_verification = None;
+            return true;
+        }
+        false
     }
 }
 

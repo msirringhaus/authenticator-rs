@@ -1,5 +1,4 @@
 use crate::crypto::{CryptoError, PinUvAuthToken};
-use crate::ctap2::client_data::ClientDataHash;
 use crate::ctap2::commands::client_pin::{GetPinRetries, GetUvRetries, Pin, PinError};
 use crate::errors::AuthenticatorError;
 use crate::transport::errors::{ApduErrorStatus, HIDError};
@@ -10,6 +9,7 @@ use std::error::Error as StdErrorT;
 use std::fmt;
 use std::io::{Read, Write};
 
+pub mod authenticator_config;
 pub(crate) mod client_pin;
 pub(crate) mod get_assertion;
 pub(crate) mod get_info;
@@ -22,8 +22,6 @@ pub(crate) mod selection;
 pub trait Request<T>
 where
     Self: fmt::Debug,
-    Self: RequestCtap1<Output = T>,
-    Self: RequestCtap2<Output = T>,
 {
     fn is_ctap2_request(&self) -> bool;
 }
@@ -114,17 +112,14 @@ pub(crate) enum PinUvAuthResult {
 
 /// Helper-trait to determine pin_uv_auth_param from PIN or UV.
 pub(crate) trait PinUvAuthCommand: RequestCtap2 {
-    fn pin(&self) -> &Option<Pin>;
-    fn set_pin(&mut self, pin: Option<Pin>);
     fn set_pin_uv_auth_param(
         &mut self,
         pin_uv_auth_token: Option<PinUvAuthToken>,
     ) -> Result<(), AuthenticatorError>;
-    fn client_data_hash(&self) -> ClientDataHash;
-    fn set_uv_option(&mut self, uv: Option<bool>);
-    fn get_uv_option(&mut self) -> Option<bool>;
     fn get_rp_id(&self) -> Option<&String>;
-    fn set_discouraged_uv_option(&mut self);
+    fn pin(&self) -> &Option<Pin>;
+    fn set_pin(&mut self, pin: Option<Pin>);
+    fn handle_discouraged_uv_option(&mut self) -> bool;
 }
 
 pub(crate) fn repackage_pin_errors<D: FidoDevice>(
@@ -179,6 +174,7 @@ pub enum Command {
     Reset = 0x07,
     GetNextAssertion = 0x08,
     Selection = 0x0B,
+    AuthenticatorConfig = 0x0D,
 }
 
 impl Command {

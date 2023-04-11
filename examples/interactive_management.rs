@@ -4,6 +4,7 @@
 
 use authenticator::{
     authenticatorservice::{AuthenticatorService, CtapVersion},
+    ctap2::commands::authenticator_config::{AuthConfigCommand, SetMinPINLength},
     errors::AuthenticatorError,
     statecallback::StateCallback,
     InteractiveRequest, Pin, ResetResult, StatusUpdate,
@@ -52,6 +53,16 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                             choices.push("2");
                         }
                     }
+                    if info.options.authnr_cfg == Some(true) && info.options.always_uv.is_some() {
+                        println!("(3) Toggle 'Always UV'");
+                        choices.push("3");
+                    }
+                    if info.options.authnr_cfg == Some(true)
+                        && info.options.set_min_pin_length.is_some()
+                    {
+                        println!("(4) Set min. PIN length");
+                        choices.push("4");
+                    }
 
                     let mut input = String::new();
                     while !choices.contains(&input.trim()) {
@@ -91,6 +102,37 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                                     .expect("Failed to send PIN-set request");
                             }
                             return;
+                        }
+                        "3" => {
+                            tx.send(InteractiveRequest::ChangeConfig(
+                                AuthConfigCommand::ToggleAlwaysUv,
+                            ))
+                            .expect("Failed to send Reset request.");
+                        }
+                        "4" => {
+                            let mut length = String::new();
+                            while length.trim().parse::<u64>().is_err() {
+                                length.clear();
+                                print!("New minimum PIN length: ");
+                                io::stdout()
+                                    .lock()
+                                    .flush()
+                                    .expect("Failed to flush stdout!");
+                                io::stdin()
+                                    .read_line(&mut length)
+                                    .expect("error: unable to read user input");
+                            }
+                            let new_length = length.trim().parse::<u64>().unwrap();
+                            let cmd = SetMinPINLength {
+                                new_min_pin_length: Some(new_length),
+                                min_pin_length_rpids: None,
+                                force_change_pin: None,
+                            };
+
+                            tx.send(InteractiveRequest::ChangeConfig(
+                                AuthConfigCommand::SetMinPINLength(cmd),
+                            ))
+                            .expect("Failed to send Reset request.");
                         }
                         _ => {
                             panic!("Can't happen");
