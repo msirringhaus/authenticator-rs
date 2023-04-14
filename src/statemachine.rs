@@ -10,6 +10,10 @@ use crate::ctap2::commands::authenticator_config::{AuthConfigCommand, Authentica
 use crate::ctap2::commands::client_pin::{
     ChangeExistingPin, Pin, PinError, PinUvAuthTokenPermission, SetNewPin,
 };
+use crate::ctap2::commands::credential_management::{
+    CredManagementCommand, CredentialListEntry, CredentialManagement, CredentialManagementResult,
+    CredentialRpListEntry, Metadata,
+};
 use crate::ctap2::commands::get_assertion::{
     GetAssertion, GetAssertionOptions, GetAssertionResult,
 };
@@ -37,8 +41,8 @@ use crate::transport::{errors::HIDError, hid::HIDDevice, FidoDevice, Nonce};
 use crate::u2fprotocol::{u2f_init_device, u2f_is_keyhandle_valid, u2f_register, u2f_sign};
 use crate::u2ftypes::U2FDevice;
 use crate::{
-    send_status, AuthenticatorTransports, InteractiveRequest, KeyHandle, RegisterFlags,
-    RegisterResult, SignFlags, SignResult, StatusPinUv, StatusUpdate,
+    send_status, AuthenticatorTransports, CredManagementCmd, InteractiveRequest, KeyHandle,
+    ManageResult, RegisterFlags, RegisterResult, SignFlags, SignResult, StatusPinUv, StatusUpdate,
 };
 use std::sync::mpsc::{channel, RecvError, RecvTimeoutError, Sender};
 use std::thread;
@@ -71,6 +75,18 @@ where
     }
 
     (&app_ids[0], vec![])
+}
+
+macro_rules! unwrap_option {
+    ($item: expr, $callback: expr) => {
+        match $item {
+            Some(r) => r,
+            None => {
+                $callback.call(Err(AuthenticatorError::Platform));
+                return;
+            }
+        }
+    };
 }
 
 macro_rules! unwrap_result {
@@ -987,11 +1003,11 @@ impl StateMachine {
         }
     }
 
-    pub fn reset_helper(
+    pub fn reset_helper<T: From<()>>(
         dev: &mut Device,
         selector: Sender<DeviceSelectorEvent>,
         status: Sender<crate::StatusUpdate>,
-        callback: StateCallback<crate::Result<crate::ResetResult>>,
+        callback: StateCallback<crate::Result<T>>,
         keep_alive: &dyn Fn() -> bool,
     ) {
         let reset = Reset {};
@@ -1016,7 +1032,7 @@ impl StateMachine {
         }
 
         match resp {
-            Ok(()) => callback.call(Ok(())),
+            Ok(()) => callback.call(Ok(T::from(()))),
             Err(HIDError::DeviceNotSupported) | Err(HIDError::UnsupportedCommand) => {}
             Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {}
             Err(e) => {
@@ -1054,12 +1070,12 @@ impl StateMachine {
         self.transaction = Some(try_or!(transaction, move |e| cbc.call(Err(e))));
     }
 
-    pub fn set_or_change_pin_helper(
+    pub fn set_or_change_pin_helper<T: From<()>>(
         dev: &mut Device,
         mut current_pin: Option<Pin>,
         new_pin: Pin,
         status: Sender<crate::StatusUpdate>,
-        callback: StateCallback<crate::Result<crate::ResetResult>>,
+        callback: StateCallback<crate::Result<T>>,
         alive: &dyn Fn() -> bool,
     ) {
         let mut shared_secret = match dev.establish_shared_secret() {
@@ -1144,7 +1160,7 @@ impl StateMachine {
                 .map_err(AuthenticatorError::HIDError)
         };
 
-        callback.call(res);
+        callback.call(res.map(|r| T::from(r)));
     }
 
     pub fn set_pin(
@@ -1424,11 +1440,267 @@ impl StateMachine {
         self.transaction = Some(try_or!(transaction, |e| cbc.call(Err(e))));
     }
 
+    fn credential_management(
+        dev: &mut Device,
+        command: CredManagementCmd,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ManageResult>>,
+        alive: &dyn Fn() -> bool,
+    ) {
+        let mut skip_uv = false;
+        let authinfo = match dev.get_authenticator_info() {
+            Some(i) => i.clone(),
+            None => {
+                callback.call(Err(HIDError::DeviceNotInitialized.into()));
+                return;
+            }
+        };
+
+        if authinfo.options.cred_mgmt != Some(true) {
+            callback.call(Err(AuthenticatorError::HIDError(
+                HIDError::UnsupportedCommand,
+            )));
+            return;
+        }
+
+        let mut cred_management = match command {
+            CredManagementCmd::GetMetadata => {
+                CredentialManagement::new(CredManagementCommand::GetCredsMetadata)
+            }
+            CredManagementCmd::GetCredentials => {
+                CredentialManagement::new(CredManagementCommand::EnumerateRPsBegin)
+            }
+            CredManagementCmd::DeleteCredential(cred_id) => {
+                CredentialManagement::new(CredManagementCommand::DeleteCredential(cred_id))
+            }
+            CredManagementCmd::UpdateUserInformation((cred_id, user)) => CredentialManagement::new(
+                CredManagementCommand::UpdateUserInformation((cred_id, user)),
+            ),
+        };
+
+        let mut credential_list: Vec<CredentialRpListEntry> = Vec::new();
+        let mut remaining_rps = 0;
+        let mut remaining_cred_ids = 0;
+        let mut current_rp = 0;
+        let mut skip_puap = false;
+        let mut pin_uv_auth_result = PinUvAuthResult::NoAuthRequired;
+        while alive() {
+            if !skip_puap {
+                // If authinfo.options.uv_acfg is not supported, this will return UnauthorizedPermission
+                pin_uv_auth_result = match Self::determine_puap_if_needed(
+                    &mut cred_management,
+                    dev,
+                    skip_uv,
+                    PinUvAuthTokenPermission::CredentialManagement,
+                    UserVerificationRequirement::Preferred,
+                    &status,
+                    &callback,
+                    alive,
+                ) {
+                    Ok(r) => r,
+                    Err(()) => {
+                        return;
+                    }
+                };
+            }
+
+            debug!("------------------------------------------------------------------");
+            debug!("{cred_management:?} using {pin_uv_auth_result:?}");
+            debug!("------------------------------------------------------------------");
+
+            let resp = dev.send_cbor_cancellable(&cred_management, alive);
+            match resp {
+                Ok(result) => {
+                    skip_puap = true;
+                    match cred_management.subcommand {
+                        CredManagementCommand::GetCredsMetadata => {
+                            let existing_resident_credentials_count = unwrap_option!(
+                                result.existing_resident_credentials_count,
+                                callback
+                            );
+                            let max_possible_remaining_resident_credentials_count = unwrap_option!(
+                                result.max_possible_remaining_resident_credentials_count,
+                                callback
+                            );
+                            let response = Metadata {
+                                existing_resident_credentials_count,
+                                max_possible_remaining_resident_credentials_count,
+                            };
+                            callback.call(Ok(ManageResult::CredManagement(
+                                CredentialManagementResult::Metadata(response),
+                            )));
+                            return;
+                        }
+                        CredManagementCommand::EnumerateRPsBegin
+                        | CredManagementCommand::EnumerateRPsGetNextRP => {
+                            if matches!(
+                                cred_management.subcommand,
+                                CredManagementCommand::EnumerateRPsBegin
+                            ) {
+                                let total_rps = unwrap_option!(result.total_rps, callback);
+                                if total_rps == 0 {
+                                    // This token doesn't have any RPs, but its not an error,
+                                    // so we return an Ok with an empty list.
+                                    callback.call(Ok(ManageResult::CredManagement(
+                                        CredentialManagementResult::CredentialList(credential_list),
+                                    )));
+                                    return;
+                                }
+                                remaining_rps = total_rps - 1;
+                            } else {
+                                remaining_rps -= 1;
+                            }
+
+                            let rp = unwrap_option!(result.rp, callback);
+                            let rp_id_hash = unwrap_option!(result.rp_id_hash, callback);
+                            let rp_res = CredentialRpListEntry {
+                                rp,
+                                rp_id_hash,
+                                credentials: vec![],
+                            };
+                            credential_list.push(rp_res);
+                            if remaining_rps > 0 {
+                                cred_management.subcommand =
+                                    CredManagementCommand::EnumerateRPsGetNextRP;
+                            } else {
+                                cred_management.subcommand =
+                                    CredManagementCommand::EnumerateCredentialsBegin(
+                                        unwrap_result!(
+                                            RpIdHash::from(&credential_list[0].rp_id_hash),
+                                            callback
+                                        ),
+                                    );
+                            }
+                            unwrap_result!(cred_management.regenerate_puap(), callback);
+                            continue;
+                        }
+                        CredManagementCommand::EnumerateCredentialsBegin(..)
+                        | CredManagementCommand::EnumerateCredentialsGetNextCredential => {
+                            let user = unwrap_option!(result.user, callback);
+                            let credential_id = unwrap_option!(result.credential_id, callback);
+                            let public_key = unwrap_option!(result.public_key, callback);
+                            let cred_protect = unwrap_option!(result.cred_protect, callback);
+                            let large_blob_key = result.large_blob_key;
+
+                            if matches!(
+                                cred_management.subcommand,
+                                CredManagementCommand::EnumerateCredentialsBegin(..)
+                            ) {
+                                remaining_cred_ids =
+                                    unwrap_option!(result.total_credentials, callback) - 1;
+                            } else {
+                                remaining_cred_ids -= 1;
+                            }
+                            // We might have to change the global variable, but need the unmodified below
+                            let current_rp_backup = current_rp;
+                            let mut we_are_done = false;
+                            if remaining_cred_ids > 0 {
+                                cred_management.subcommand =
+                                    CredManagementCommand::EnumerateCredentialsGetNextCredential;
+                            } else {
+                                current_rp += 1;
+                                // We have all credentials from this RP. Starting with the next RP.
+                                if current_rp < credential_list.len() {
+                                    cred_management.subcommand =
+                                        CredManagementCommand::EnumerateCredentialsBegin(
+                                            unwrap_result!(
+                                                RpIdHash::from(
+                                                    &credential_list[current_rp].rp_id_hash
+                                                ),
+                                                callback
+                                            ),
+                                        );
+                                    unwrap_result!(cred_management.regenerate_puap(), callback);
+                                } else {
+                                    // Finally done iterating over all RPs and their Credentials
+                                    we_are_done = true;
+                                }
+                            }
+                            let key = CredentialListEntry {
+                                user,
+                                credential_id,
+                                public_key,
+                                cred_protect,
+                                large_blob_key: large_blob_key.map(|x| x.into_vec()),
+                            };
+                            credential_list[current_rp_backup].credentials.push(key);
+                            if we_are_done {
+                                callback.call(Ok(ManageResult::CredManagement(
+                                    CredentialManagementResult::CredentialList(credential_list),
+                                )));
+                                return;
+                            } else {
+                                continue;
+                            }
+                        }
+                        CredManagementCommand::DeleteCredential(_) => {
+                            callback.call(Ok(ManageResult::CredManagement(
+                                CredentialManagementResult::DeleteSucess,
+                            )));
+                            return;
+                        }
+                        CredManagementCommand::UpdateUserInformation(_) => {
+                            callback.call(Ok(ManageResult::CredManagement(
+                                CredentialManagementResult::DeleteSucess,
+                            )));
+                            return;
+                        }
+                    };
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {
+                    // Channel busy. Client SHOULD retry the request after a short delay.
+                    thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(
+                    StatusCode::OperationDenied,
+                    _,
+                ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
+                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                    // (e.g. wrong fingerprint used), while doing GetAssertion
+                    // Yes, this is a different error code than for MakeCredential.
+                    send_status(
+                        &status,
+                        StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
+                    );
+                    skip_puap = false;
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::PinRequired, _)))
+                    if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) =>
+                {
+                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                    // repeatedly, so that we have to fall back to PINs
+                    skip_uv = true;
+                    skip_puap = false;
+                    continue;
+                }
+                Err(HIDError::Command(CommandError::StatusCode(StatusCode::UvBlocked, _)))
+                    if matches!(
+                        pin_uv_auth_result,
+                        PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
+                    ) =>
+                {
+                    // This should only happen for CTAP2.1 tokens that use internal UV and failed
+                    // repeatedly, so that we have to fall back to PINs
+                    skip_uv = true;
+                    skip_puap = false;
+                    continue;
+                }
+                Err(e) => {
+                    warn!("error happened: {e}");
+                    callback.call(Err(AuthenticatorError::HIDError(e)));
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn configure_authenticator(
         dev: &mut Device,
         cfg_subcommand: AuthConfigCommand,
         status: Sender<crate::StatusUpdate>,
-        callback: StateCallback<crate::Result<crate::ResetResult>>,
+        callback: StateCallback<crate::Result<crate::ManageResult>>,
         alive: &dyn Fn() -> bool,
     ) {
         let mut authcfg = AuthenticatorConfig::new(cfg_subcommand);
@@ -1480,7 +1752,7 @@ impl StateMachine {
             let resp = dev.send_cbor_cancellable(&authcfg, alive);
             match resp {
                 Ok(()) => {
-                    callback.call(Ok(()));
+                    callback.call(Ok(ManageResult::Success));
                     break;
                 }
                 Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {
@@ -1541,7 +1813,7 @@ impl StateMachine {
         &mut self,
         timeout: u64,
         status: Sender<crate::StatusUpdate>,
-        callback: StateCallback<crate::Result<crate::ResetResult>>,
+        callback: StateCallback<crate::Result<crate::ManageResult>>,
     ) {
         // Abort any prior register/sign calls.
         self.cancel();
@@ -1603,7 +1875,16 @@ impl StateMachine {
                                 status,
                                 callback.clone(),
                                 alive,
-                            )
+                            );
+                        }
+                        Ok(InteractiveRequest::CredentialManagement(cred_management)) => {
+                            Self::credential_management(
+                                &mut dev,
+                                cred_management,
+                                status,
+                                callback.clone(),
+                                alive,
+                            );
                         }
                         Err(RecvTimeoutError::Timeout) => {
                             if !alive() {

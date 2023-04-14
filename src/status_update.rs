@@ -1,9 +1,18 @@
 use super::{u2ftypes, Pin};
-use crate::ctap2::commands::{
-    authenticator_config::AuthConfigCommand, get_info::AuthenticatorInfo,
+use crate::ctap2::{
+    commands::{authenticator_config::AuthConfigCommand, get_info::AuthenticatorInfo},
+    server::{PublicKeyCredentialId, User},
 };
 use serde::{Deserialize, Serialize as DeriveSer, Serializer};
 use std::sync::mpsc::Sender;
+
+#[derive(Debug, Deserialize, DeriveSer)]
+pub enum CredManagementCmd {
+    GetMetadata,
+    GetCredentials,
+    DeleteCredential(PublicKeyCredentialId),
+    UpdateUserInformation((PublicKeyCredentialId, User)),
+}
 
 #[derive(Debug, Deserialize, DeriveSer)]
 pub enum InteractiveRequest {
@@ -11,6 +20,7 @@ pub enum InteractiveRequest {
     ChangePIN(Pin, Pin),
     SetPIN(Pin),
     ChangeConfig(AuthConfigCommand),
+    CredentialManagement(CredManagementCmd),
 }
 
 // Simply ignoring the Sender when serializing

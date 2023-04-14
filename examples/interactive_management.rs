@@ -7,7 +7,7 @@ use authenticator::{
     ctap2::commands::authenticator_config::{AuthConfigCommand, SetMinPINLength},
     errors::AuthenticatorError,
     statecallback::StateCallback,
-    InteractiveRequest, Pin, ResetResult, StatusUpdate,
+    CredManagementCmd, InteractiveRequest, ManageResult, Pin, StatusPinUv, StatusUpdate,
 };
 use getopts::Options;
 use log::debug;
@@ -62,6 +62,10 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                     {
                         println!("(4) Set min. PIN length");
                         choices.push("4");
+                    }
+                    if info.options.cred_mgmt == Some(true) {
+                        println!("(5) Credential Management");
+                        choices.push("5");
                     }
 
                     let mut input = String::new();
@@ -134,6 +138,12 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                             ))
                             .expect("Failed to send Reset request.");
                         }
+                        "5" => {
+                            tx.send(InteractiveRequest::CredentialManagement(
+                                CredManagementCmd::GetCredentials,
+                            ))
+                            .expect("Failed to send Reset request.");
+                        }
                         _ => {
                             panic!("Can't happen");
                         }
@@ -163,8 +173,45 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                 println!("STATUS: Please select a device by touching one of them.");
             }
             Ok(StatusUpdate::DeviceSelected(_dev_info)) => {}
-            Ok(StatusUpdate::PinUvError(..)) => {
-                println!("STATUS: Pin Error!");
+            Ok(StatusUpdate::PinUvError(StatusPinUv::PinRequired(sender))) => {
+                let raw_pin =
+                    rpassword::prompt_password_stderr("Enter PIN: ").expect("Failed to read PIN");
+                sender.send(Pin::new(&raw_pin)).expect("Failed to send PIN");
+                continue;
+            }
+            Ok(StatusUpdate::PinUvError(StatusPinUv::InvalidPin(sender, attempts))) => {
+                println!(
+                    "Wrong PIN! {}",
+                    attempts.map_or("Try again.".to_string(), |a| format!(
+                        "You have {a} attempts left."
+                    ))
+                );
+                let raw_pin =
+                    rpassword::prompt_password_stderr("Enter PIN: ").expect("Failed to read PIN");
+                sender.send(Pin::new(&raw_pin)).expect("Failed to send PIN");
+                continue;
+            }
+            Ok(StatusUpdate::PinUvError(StatusPinUv::PinAuthBlocked)) => {
+                panic!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
+            }
+            Ok(StatusUpdate::PinUvError(StatusPinUv::PinBlocked)) => {
+                panic!("Too many failed attempts. Your device has been blocked. Reset it.")
+            }
+            Ok(StatusUpdate::PinUvError(StatusPinUv::InvalidUv(attempts))) => {
+                println!(
+                    "Wrong UV! {}",
+                    attempts.map_or("Try again.".to_string(), |a| format!(
+                        "You have {a} attempts left."
+                    ))
+                );
+                continue;
+            }
+            Ok(StatusUpdate::PinUvError(StatusPinUv::UvBlocked)) => {
+                println!("Too many failed UV-attempts.");
+                continue;
+            }
+            Ok(StatusUpdate::PinUvError(e)) => {
+                panic!("Unexpected error: {:?}", e)
             }
             Err(RecvError) => {
                 println!("STATUS: end");
@@ -222,7 +269,7 @@ fn main() {
 
     let (manage_tx, manage_rx) = channel();
     let state_callback =
-        StateCallback::<Result<ResetResult, AuthenticatorError>>::new(Box::new(move |rv| {
+        StateCallback::<Result<ManageResult, AuthenticatorError>>::new(Box::new(move |rv| {
             manage_tx.send(rv).unwrap();
         }));
 
@@ -238,7 +285,7 @@ fn main() {
         .recv()
         .expect("Problem receiving, unable to continue");
     match manage_result {
-        Ok(_) => println!("Success!"),
+        Ok(r) => println!("Success! Result = {r:?}"),
         Err(e) => println!("Error! {:?}", e),
     };
     println!("Done");

@@ -39,6 +39,7 @@ pub mod ctap2;
 pub use ctap2::attestation::AttestationObject;
 pub use ctap2::client_data::CollectedClientData;
 pub use ctap2::commands::client_pin::{Pin, PinError};
+use ctap2::commands::credential_management::CredentialManagementResult;
 pub use ctap2::commands::get_assertion::Assertion;
 pub use ctap2::commands::get_info::AuthenticatorInfo;
 pub use ctap2::GetAssertionResult;
@@ -95,7 +96,19 @@ pub enum SignResult {
     CTAP2(GetAssertionResult),
 }
 
+#[derive(Debug)]
+pub enum ManageResult {
+    Success,
+    CredManagement(CredentialManagementResult),
+}
+
 pub type ResetResult = ();
+
+impl From<()> for ManageResult {
+    fn from(_value: ResetResult) -> Self {
+        ManageResult::Success
+    }
+}
 
 pub type Result<T> = std::result::Result<T, errors::AuthenticatorError>;
 
