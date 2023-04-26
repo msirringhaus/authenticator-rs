@@ -103,15 +103,17 @@ pub struct CredentialManagement {
     pin_uv_auth_param: Option<PinUvAuthParam>, // First 16 bytes of HMAC-SHA-256 of contents using pinUvAuthToken.
     pin_uv_auth_token: Option<PinUvAuthToken>, // TODO(MS): REMOVE ME, once we rebase on top of preflighting, then this is part of *_param
     pin: Option<Pin>,
+    use_legacy_preview: bool,
 }
 
 impl CredentialManagement {
-    pub(crate) fn new(subcommand: CredManagementCommand) -> Self {
+    pub(crate) fn new(subcommand: CredManagementCommand, use_legacy_preview: bool) -> Self {
         Self {
             subcommand,
             pin_uv_auth_param: None,
             pin_uv_auth_token: None,
             pin: None,
+            use_legacy_preview,
         }
     }
     pub(crate) fn regenerate_puap(&mut self) -> Result<(), AuthenticatorError> {
@@ -353,8 +355,12 @@ impl<'de> Deserialize<'de> for CredentialManagementResponse {
 impl RequestCtap2 for CredentialManagement {
     type Output = CredentialManagementResponse;
 
-    fn command() -> Command {
-        Command::CredentialManagement
+    fn command(&self) -> Command {
+        if self.use_legacy_preview {
+            Command::CredentialManagementPreview
+        } else {
+            Command::CredentialManagement
+        }
     }
 
     fn wire_format(&self) -> Result<Vec<u8>, HIDError> {

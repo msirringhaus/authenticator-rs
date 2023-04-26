@@ -370,7 +370,7 @@ impl RequestCtap1 for MakeCredentials {
 impl RequestCtap2 for MakeCredentials {
     type Output = MakeCredentialsResult;
 
-    fn command() -> Command {
+    fn command(&self) -> Command {
         Command::MakeCredentials
     }
 

@@ -1456,25 +1456,33 @@ impl StateMachine {
             }
         };
 
-        if authinfo.options.cred_mgmt != Some(true) {
+        if authinfo.options.cred_mgmt != Some(true)
+            && authinfo.options.credential_mgmt_preview != Some(true)
+        {
             callback.call(Err(AuthenticatorError::HIDError(
                 HIDError::UnsupportedCommand,
             )));
             return;
         }
 
+        let use_legacy_preview = authinfo.options.cred_mgmt != Some(true);
+
         let mut cred_management = match command {
-            CredManagementCmd::GetMetadata => {
-                CredentialManagement::new(CredManagementCommand::GetCredsMetadata)
-            }
-            CredManagementCmd::GetCredentials => {
-                CredentialManagement::new(CredManagementCommand::EnumerateRPsBegin)
-            }
-            CredManagementCmd::DeleteCredential(cred_id) => {
-                CredentialManagement::new(CredManagementCommand::DeleteCredential(cred_id))
-            }
+            CredManagementCmd::GetMetadata => CredentialManagement::new(
+                CredManagementCommand::GetCredsMetadata,
+                use_legacy_preview,
+            ),
+            CredManagementCmd::GetCredentials => CredentialManagement::new(
+                CredManagementCommand::EnumerateRPsBegin,
+                use_legacy_preview,
+            ),
+            CredManagementCmd::DeleteCredential(cred_id) => CredentialManagement::new(
+                CredManagementCommand::DeleteCredential(cred_id),
+                use_legacy_preview,
+            ),
             CredManagementCmd::UpdateUserInformation((cred_id, user)) => CredentialManagement::new(
                 CredManagementCommand::UpdateUserInformation((cred_id, user)),
+                use_legacy_preview,
             ),
         };
 

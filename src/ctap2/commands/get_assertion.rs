@@ -377,7 +377,7 @@ impl RequestCtap1 for GetAssertion {
 impl RequestCtap2 for GetAssertion {
     type Output = GetAssertionResult;
 
-    fn command() -> Command {
+    fn command(&self) -> Command {
         Command::GetAssertion
     }
 

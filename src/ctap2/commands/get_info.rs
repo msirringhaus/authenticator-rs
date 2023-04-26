@@ -17,7 +17,7 @@ pub struct GetInfo {}
 impl RequestCtap2 for GetInfo {
     type Output = AuthenticatorInfo;
 
-    fn command() -> Command {
+    fn command(&self) -> Command {
         Command::GetInfo
     }
 

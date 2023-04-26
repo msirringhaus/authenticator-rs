@@ -63,7 +63,9 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                         println!("(4) Set min. PIN length");
                         choices.push("4");
                     }
-                    if info.options.cred_mgmt == Some(true) {
+                    if info.options.cred_mgmt == Some(true)
+                        || info.options.credential_mgmt_preview == Some(true)
+                    {
                         println!("(5) Credential Management");
                         choices.push("5");
                     }

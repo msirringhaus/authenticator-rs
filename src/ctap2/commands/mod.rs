@@ -75,7 +75,7 @@ pub trait RequestCtap1: fmt::Debug {
 pub trait RequestCtap2: fmt::Debug {
     type Output;
 
-    fn command() -> Command;
+    fn command(&self) -> Command;
 
     fn wire_format(&self) -> Result<Vec<u8>, HIDError>;
 
@@ -200,21 +200,7 @@ pub enum Command {
     CredentialManagement = 0x0A,
     Selection = 0x0B,
     AuthenticatorConfig = 0x0D,
-}
-
-impl Command {
-    #[cfg(test)]
-    pub fn from_u8(v: u8) -> Option<Command> {
-        match v {
-            0x01 => Some(Command::MakeCredentials),
-            0x02 => Some(Command::GetAssertion),
-            0x04 => Some(Command::GetInfo),
-            0x06 => Some(Command::ClientPin),
-            0x07 => Some(Command::Reset),
-            0x08 => Some(Command::GetNextAssertion),
-            _ => None,
-        }
-    }
+    CredentialManagementPreview = 0x41,
 }
 
 #[derive(Debug)]

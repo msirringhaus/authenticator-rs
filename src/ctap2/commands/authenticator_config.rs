@@ -154,7 +154,7 @@ impl Serialize for AuthenticatorConfig {
 impl RequestCtap2 for AuthenticatorConfig {
     type Output = ();
 
-    fn command() -> Command {
+    fn command(&self) -> Command {
         Command::AuthenticatorConfig
     }
 
