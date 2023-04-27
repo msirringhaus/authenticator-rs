@@ -11,8 +11,8 @@ use crate::ctap2::commands::client_pin::{
     ChangeExistingPin, Pin, PinError, PinUvAuthTokenPermission, SetNewPin,
 };
 use crate::ctap2::commands::credential_management::{
-    CredManagementCommand, CredentialListEntry, CredentialManagement, CredentialManagementResult,
-    CredentialRpListEntry, Metadata,
+    CredManagementCommand, CredentialList, CredentialListEntry, CredentialManagement,
+    CredentialManagementResult, CredentialRpListEntry,
 };
 use crate::ctap2::commands::get_assertion::{
     GetAssertion, GetAssertionOptions, GetAssertionResult,
@@ -1468,12 +1468,8 @@ impl StateMachine {
         let use_legacy_preview = authinfo.options.cred_mgmt != Some(true);
 
         let mut cred_management = match command {
-            CredManagementCmd::GetMetadata => CredentialManagement::new(
-                CredManagementCommand::GetCredsMetadata,
-                use_legacy_preview,
-            ),
             CredManagementCmd::GetCredentials => CredentialManagement::new(
-                CredManagementCommand::EnumerateRPsBegin,
+                CredManagementCommand::GetCredsMetadata,
                 use_legacy_preview,
             ),
             CredManagementCmd::DeleteCredential(cred_id) => CredentialManagement::new(
@@ -1486,7 +1482,7 @@ impl StateMachine {
             ),
         };
 
-        let mut credential_list: Vec<CredentialRpListEntry> = Vec::new();
+        let mut credential_result = CredentialList::new();
         let mut remaining_rps = 0;
         let mut remaining_cred_ids = 0;
         let mut current_rp = 0;
@@ -1530,14 +1526,23 @@ impl StateMachine {
                                 result.max_possible_remaining_resident_credentials_count,
                                 callback
                             );
-                            let response = Metadata {
-                                existing_resident_credentials_count,
-                                max_possible_remaining_resident_credentials_count,
-                            };
-                            callback.call(Ok(ManageResult::CredManagement(
-                                CredentialManagementResult::Metadata(response),
-                            )));
-                            return;
+                            credential_result.existing_resident_credentials_count =
+                                existing_resident_credentials_count;
+                            credential_result.max_possible_remaining_resident_credentials_count =
+                                max_possible_remaining_resident_credentials_count;
+                            if existing_resident_credentials_count > 0 {
+                                cred_management.subcommand =
+                                    CredManagementCommand::EnumerateRPsBegin;
+                                unwrap_result!(cred_management.regenerate_puap(), callback);
+                                continue;
+                            } else {
+                                // This token doesn't have any resident keys, but its not an error,
+                                // so we return an Ok with an empty list.
+                                callback.call(Ok(ManageResult::CredManagement(
+                                    CredentialManagementResult::CredentialList(credential_result),
+                                )));
+                                return;
+                            }
                         }
                         CredManagementCommand::EnumerateRPsBegin
                         | CredManagementCommand::EnumerateRPsGetNextRP => {
@@ -1550,7 +1555,9 @@ impl StateMachine {
                                     // This token doesn't have any RPs, but its not an error,
                                     // so we return an Ok with an empty list.
                                     callback.call(Ok(ManageResult::CredManagement(
-                                        CredentialManagementResult::CredentialList(credential_list),
+                                        CredentialManagementResult::CredentialList(
+                                            credential_result,
+                                        ),
                                     )));
                                     return;
                                 }
@@ -1566,7 +1573,7 @@ impl StateMachine {
                                 rp_id_hash,
                                 credentials: vec![],
                             };
-                            credential_list.push(rp_res);
+                            credential_result.credential_list.push(rp_res);
                             if remaining_rps > 0 {
                                 cred_management.subcommand =
                                     CredManagementCommand::EnumerateRPsGetNextRP;
@@ -1574,7 +1581,9 @@ impl StateMachine {
                                 cred_management.subcommand =
                                     CredManagementCommand::EnumerateCredentialsBegin(
                                         unwrap_result!(
-                                            RpIdHash::from(&credential_list[0].rp_id_hash),
+                                            RpIdHash::from(
+                                                &credential_result.credential_list[0].rp_id_hash
+                                            ),
                                             callback
                                         ),
                                     );
@@ -1608,12 +1617,13 @@ impl StateMachine {
                             } else {
                                 current_rp += 1;
                                 // We have all credentials from this RP. Starting with the next RP.
-                                if current_rp < credential_list.len() {
+                                if current_rp < credential_result.credential_list.len() {
                                     cred_management.subcommand =
                                         CredManagementCommand::EnumerateCredentialsBegin(
                                             unwrap_result!(
                                                 RpIdHash::from(
-                                                    &credential_list[current_rp].rp_id_hash
+                                                    &credential_result.credential_list[current_rp]
+                                                        .rp_id_hash
                                                 ),
                                                 callback
                                             ),
@@ -1631,10 +1641,12 @@ impl StateMachine {
                                 cred_protect,
                                 large_blob_key: large_blob_key.map(|x| x.into_vec()),
                             };
-                            credential_list[current_rp_backup].credentials.push(key);
+                            credential_result.credential_list[current_rp_backup]
+                                .credentials
+                                .push(key);
                             if we_are_done {
                                 callback.call(Ok(ManageResult::CredManagement(
-                                    CredentialManagementResult::CredentialList(credential_list),
+                                    CredentialManagementResult::CredentialList(credential_result),
                                 )));
                                 return;
                             } else {

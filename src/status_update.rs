@@ -8,7 +8,6 @@ use std::sync::mpsc::Sender;
 
 #[derive(Debug, Deserialize, DeriveSer)]
 pub enum CredManagementCmd {
-    GetMetadata,
     GetCredentials,
     DeleteCredential(PublicKeyCredentialId),
     UpdateUserInformation((PublicKeyCredentialId, User)),

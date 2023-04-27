@@ -206,19 +206,28 @@ pub struct CredentialListEntry {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+pub enum CredentialManagementResult {
+    CredentialList(CredentialList),
+    DeleteSucess,
+    UpdateSuccess,
+}
+
+#[derive(Debug, Default)]
+pub struct CredentialList {
     /// Number of existing discoverable credentials present on the authenticator.
     pub existing_resident_credentials_count: u64,
     /// Number of maximum possible remaining discoverable credentials which can be created on the authenticator.
     pub max_possible_remaining_resident_credentials_count: u64,
+    /// The found credentials
+    pub credential_list: Vec<CredentialRpListEntry>,
 }
 
-#[derive(Debug)]
-pub enum CredentialManagementResult {
-    Metadata(Metadata),
-    CredentialList(Vec<CredentialRpListEntry>),
-    DeleteSucess,
-    UpdateSuccess,
+impl CredentialList {
+    pub fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for CredentialManagementResponse {
