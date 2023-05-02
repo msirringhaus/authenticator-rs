@@ -102,6 +102,71 @@ macro_rules! unwrap_result {
     };
 }
 
+macro_rules! handle_errors {
+    ($error: expr, $status: expr, $callback: expr, $pin_uv_auth_result: expr, $skip_uv: expr) => {
+        let mut _dummy_skip_puap = false;
+        handle_errors!(
+            $error,
+            $status,
+            $callback,
+            $pin_uv_auth_result,
+            $skip_uv,
+            _dummy_skip_puap
+        )
+    };
+    ($error: expr, $status: expr, $callback: expr, $pin_uv_auth_result: expr, $skip_uv: expr, $skip_puap: expr) => {
+        match $error {
+            HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _)) => {
+                // Channel busy. Client SHOULD retry the request after a short delay.
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+            HIDError::Command(CommandError::StatusCode(StatusCode::OperationDenied, _))
+                if matches!($pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) =>
+            {
+                // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                // (e.g. wrong fingerprint used), while doing GetAssertion
+                // Yes, this is a different error code than for MakeCredential.
+                send_status(
+                    &$status,
+                    StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
+                );
+                $skip_puap = false;
+                continue;
+            }
+            HIDError::Command(CommandError::StatusCode(StatusCode::PinRequired, _))
+                if matches!($pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) =>
+            {
+                // This should only happen for CTAP2.0 tokens that use internal UV and failed
+                // repeatedly, so that we have to fall back to PINs
+                $skip_uv = true;
+                $skip_puap = false;
+                continue;
+            }
+            HIDError::Command(CommandError::StatusCode(StatusCode::UvBlocked, _))
+                if matches!(
+                    $pin_uv_auth_result,
+                    PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
+                ) =>
+            {
+                // This should only happen for CTAP2.1 tokens that use internal UV and failed
+                // repeatedly, so that we have to fall back to PINs
+                $skip_uv = true;
+                $skip_puap = false;
+                continue;
+            }
+            HIDError::Command(CommandError::StatusCode(StatusCode::CredentialExcluded, _)) => {
+                $callback.call(Err(AuthenticatorError::CredentialExcluded));
+                break;
+            }
+            e => {
+                warn!("error happened: {e}");
+                $callback.call(Err(AuthenticatorError::HIDError(e)));
+                break;
+            }
+        }
+    };
+}
 #[derive(Default)]
 pub struct StateMachine {
     transaction: Option<Transaction>,
@@ -658,59 +723,8 @@ impl StateMachine {
                             callback.call(Ok(RegisterResult::CTAP2(attestation)));
                             break;
                         }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::ChannelBusy,
-                            _,
-                        ))) => {
-                            // Channel busy. Client SHOULD retry the request after a short delay.
-                            thread::sleep(Duration::from_millis(100));
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::PinAuthInvalid,
-                            _,
-                        ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                            // This should only happen for CTAP2.0 tokens that use internal UV and
-                            // failed (e.g. wrong fingerprint used), while doing MakeCredentials
-                            send_status(
-                                &status,
-                                StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
-                            );
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::PinRequired,
-                            _,
-                        ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                            // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                            // repeatedly, so that we have to fall back to PINs
-                            skip_uv = true;
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::UvBlocked,
-                            _,
-                        ))) if matches!(
-                            pin_uv_auth_result,
-                            PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
-                        ) =>
-                        {
-                            // This should only happen for CTAP2.1 tokens that use internal UV and failed
-                            // repeatedly, so that we have to fall back to PINs
-                            skip_uv = true;
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::CredentialExcluded,
-                            _,
-                        ))) => {
-                            callback.call(Err(AuthenticatorError::CredentialExcluded));
-                            break;
-                        }
                         Err(e) => {
-                            warn!("error happened: {e}");
-                            callback.call(Err(AuthenticatorError::HIDError(e)));
-                            break;
+                            handle_errors!(e, status, callback, pin_uv_auth_result, skip_uv);
                         }
                     }
                 }
@@ -940,53 +954,8 @@ impl StateMachine {
                             callback.call(Ok(SignResult::CTAP2(assertions)));
                             break;
                         }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::ChannelBusy,
-                            _,
-                        ))) => {
-                            // Channel busy. Client SHOULD retry the request after a short delay.
-                            thread::sleep(Duration::from_millis(100));
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::OperationDenied,
-                            _,
-                        ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                            // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                            // (e.g. wrong fingerprint used), while doing GetAssertion
-                            // Yes, this is a different error code than for MakeCredential.
-                            send_status(
-                                &status,
-                                StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
-                            );
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::PinRequired,
-                            _,
-                        ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                            // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                            // repeatedly, so that we have to fall back to PINs
-                            skip_uv = true;
-                            continue;
-                        }
-                        Err(HIDError::Command(CommandError::StatusCode(
-                            StatusCode::UvBlocked,
-                            _,
-                        ))) if matches!(
-                            pin_uv_auth_result,
-                            PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
-                        ) =>
-                        {
-                            // This should only happen for CTAP2.1 tokens that use internal UV and failed
-                            // repeatedly, so that we have to fall back to PINs
-                            skip_uv = true;
-                            continue;
-                        }
                         Err(e) => {
-                            warn!("error happened: {e}");
-                            callback.call(Err(AuthenticatorError::HIDError(e)));
-                            break;
+                            handle_errors!(e, status, callback, pin_uv_auth_result, skip_uv);
                         }
                     }
                 }
@@ -1660,50 +1629,8 @@ impl StateMachine {
                         }
                     };
                 }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {
-                    // Channel busy. Client SHOULD retry the request after a short delay.
-                    thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(
-                    StatusCode::OperationDenied,
-                    _,
-                ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                    // (e.g. wrong fingerprint used), while doing GetAssertion
-                    // Yes, this is a different error code than for MakeCredential.
-                    send_status(
-                        &status,
-                        StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
-                    );
-                    skip_puap = false;
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::PinRequired, _)))
-                    if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) =>
-                {
-                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                    // repeatedly, so that we have to fall back to PINs
-                    skip_uv = true;
-                    skip_puap = false;
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::UvBlocked, _)))
-                    if matches!(
-                        pin_uv_auth_result,
-                        PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
-                    ) =>
-                {
-                    // This should only happen for CTAP2.1 tokens that use internal UV and failed
-                    // repeatedly, so that we have to fall back to PINs
-                    skip_uv = true;
-                    skip_puap = false;
-                    continue;
-                }
                 Err(e) => {
-                    warn!("error happened: {e}");
-                    callback.call(Err(AuthenticatorError::HIDError(e)));
-                    break;
+                    handle_errors!(e, status, callback, pin_uv_auth_result, skip_uv, skip_puap);
                 }
             }
         }
@@ -1768,47 +1695,8 @@ impl StateMachine {
                     callback.call(Ok(ManageResult::Success));
                     break;
                 }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::ChannelBusy, _))) => {
-                    // Channel busy. Client SHOULD retry the request after a short delay.
-                    thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(
-                    StatusCode::OperationDenied,
-                    _,
-                ))) if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) => {
-                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                    // (e.g. wrong fingerprint used), while doing GetAssertion
-                    // Yes, this is a different error code than for MakeCredential.
-                    send_status(
-                        &status,
-                        StatusUpdate::PinUvError(StatusPinUv::InvalidUv(None)),
-                    );
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::PinRequired, _)))
-                    if matches!(pin_uv_auth_result, PinUvAuthResult::UsingInternalUv) =>
-                {
-                    // This should only happen for CTAP2.0 tokens that use internal UV and failed
-                    // repeatedly, so that we have to fall back to PINs
-                    skip_uv = true;
-                    continue;
-                }
-                Err(HIDError::Command(CommandError::StatusCode(StatusCode::UvBlocked, _)))
-                    if matches!(
-                        pin_uv_auth_result,
-                        PinUvAuthResult::SuccessGetPinUvAuthTokenUsingUvWithPermissions(..)
-                    ) =>
-                {
-                    // This should only happen for CTAP2.1 tokens that use internal UV and failed
-                    // repeatedly, so that we have to fall back to PINs
-                    skip_uv = true;
-                    continue;
-                }
                 Err(e) => {
-                    warn!("error happened: {e}");
-                    callback.call(Err(AuthenticatorError::HIDError(e)));
-                    break;
+                    handle_errors!(e, status, callback, pin_uv_auth_result, skip_uv);
                 }
             }
         }
