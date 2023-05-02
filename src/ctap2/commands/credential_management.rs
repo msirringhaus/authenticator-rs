@@ -187,7 +187,7 @@ pub struct CredentialRpListEntry {
     /// RP Information
     pub rp: RelyingParty,
     /// RP ID SHA-256 hash
-    pub rp_id_hash: ByteBuf,
+    pub rp_id_hash: RpIdHash,
     pub credentials: Vec<CredentialListEntry>,
 }
 

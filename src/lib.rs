@@ -104,7 +104,7 @@ pub enum ManageResult {
 
 pub type ResetResult = ();
 
-impl From<()> for ManageResult {
+impl From<ResetResult> for ManageResult {
     fn from(_value: ResetResult) -> Self {
         ManageResult::Success
     }

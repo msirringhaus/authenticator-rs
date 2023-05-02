@@ -42,7 +42,8 @@ use crate::u2fprotocol::{u2f_init_device, u2f_is_keyhandle_valid, u2f_register, 
 use crate::u2ftypes::U2FDevice;
 use crate::{
     send_status, AuthenticatorTransports, CredManagementCmd, InteractiveRequest, KeyHandle,
-    ManageResult, RegisterFlags, RegisterResult, SignFlags, SignResult, StatusPinUv, StatusUpdate,
+    ManageResult, RegisterFlags, RegisterResult, ResetResult, SignFlags, SignResult, StatusPinUv,
+    StatusUpdate,
 };
 use std::sync::mpsc::{channel, RecvError, RecvTimeoutError, Sender};
 use std::thread;
@@ -1003,7 +1004,7 @@ impl StateMachine {
         }
     }
 
-    pub fn reset_helper<T: From<()>>(
+    pub fn reset_helper<T: From<ResetResult>>(
         dev: &mut Device,
         selector: Sender<DeviceSelectorEvent>,
         status: Sender<crate::StatusUpdate>,
@@ -1490,7 +1491,6 @@ impl StateMachine {
         let mut pin_uv_auth_result = PinUvAuthResult::NoAuthRequired;
         while alive() {
             if !skip_puap {
-                // If authinfo.options.uv_acfg is not supported, this will return UnauthorizedPermission
                 pin_uv_auth_result = match Self::determine_puap_if_needed(
                     &mut cred_management,
                     dev,
@@ -1568,6 +1568,7 @@ impl StateMachine {
 
                             let rp = unwrap_option!(result.rp, callback);
                             let rp_id_hash = unwrap_option!(result.rp_id_hash, callback);
+                            let rp_id_hash = unwrap_result!(RpIdHash::from(&rp_id_hash), callback);
                             let rp_res = CredentialRpListEntry {
                                 rp,
                                 rp_id_hash,
@@ -1578,14 +1579,10 @@ impl StateMachine {
                                 cred_management.subcommand =
                                     CredManagementCommand::EnumerateRPsGetNextRP;
                             } else {
+                                // We have queried all RPs, now start querying the corresponding credentials for each RP
                                 cred_management.subcommand =
                                     CredManagementCommand::EnumerateCredentialsBegin(
-                                        unwrap_result!(
-                                            RpIdHash::from(
-                                                &credential_result.credential_list[0].rp_id_hash
-                                            ),
-                                            callback
-                                        ),
+                                        credential_result.credential_list[0].rp_id_hash.clone(),
                                     );
                             }
                             unwrap_result!(cred_management.regenerate_puap(), callback);
@@ -1620,13 +1617,9 @@ impl StateMachine {
                                 if current_rp < credential_result.credential_list.len() {
                                     cred_management.subcommand =
                                         CredManagementCommand::EnumerateCredentialsBegin(
-                                            unwrap_result!(
-                                                RpIdHash::from(
-                                                    &credential_result.credential_list[current_rp]
-                                                        .rp_id_hash
-                                                ),
-                                                callback
-                                            ),
+                                            credential_result.credential_list[current_rp]
+                                                .rp_id_hash
+                                                .clone(),
                                         );
                                     unwrap_result!(cred_management.regenerate_puap(), callback);
                                 } else {

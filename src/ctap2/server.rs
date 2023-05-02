@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::convert::{Into, TryFrom};
 use std::fmt;
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct RpIdHash(pub [u8; 32]);
 
 impl fmt::Debug for RpIdHash {
