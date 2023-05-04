@@ -50,6 +50,7 @@ mod transport;
 mod virtualdevices;
 
 mod status_update;
+use serde::Serialize;
 pub use status_update::*;
 
 mod crypto;
@@ -96,7 +97,7 @@ pub enum SignResult {
     CTAP2(GetAssertionResult),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum ManageResult {
     Success,
     CredManagement(CredentialManagementResult),

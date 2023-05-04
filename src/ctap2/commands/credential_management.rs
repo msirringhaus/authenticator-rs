@@ -182,7 +182,7 @@ pub struct CredentialManagementResponse {
     pub large_blob_key: Option<ByteBuf>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct CredentialRpListEntry {
     /// RP Information
     pub rp: RelyingParty,
@@ -191,7 +191,7 @@ pub struct CredentialRpListEntry {
     pub credentials: Vec<CredentialListEntry>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct CredentialListEntry {
     /// User Information
     pub user: User,
@@ -205,14 +205,14 @@ pub struct CredentialListEntry {
     pub large_blob_key: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum CredentialManagementResult {
     CredentialList(CredentialList),
     DeleteSucess,
     UpdateSuccess,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct CredentialList {
     /// Number of existing discoverable credentials present on the authenticator.
     pub existing_resident_credentials_count: u64,
