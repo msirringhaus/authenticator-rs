@@ -7,7 +7,8 @@ use authenticator::{
     ctap2::commands::authenticator_config::{AuthConfigCommand, SetMinPINLength},
     errors::AuthenticatorError,
     statecallback::StateCallback,
-    CredManagementCmd, InteractiveRequest, ManageResult, Pin, StatusPinUv, StatusUpdate,
+    BioEnrollmentCmd, CredManagementCmd, InteractiveRequest, InteractiveUpdate, ManageResult, Pin,
+    StatusPinUv, StatusUpdate,
 };
 use getopts::Options;
 use log::debug;
@@ -26,7 +27,11 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
     let mut num_of_devices = 0;
     loop {
         match status_rx.recv() {
-            Ok(StatusUpdate::InteractiveManagement((tx, dev_info, auth_info))) => {
+            Ok(StatusUpdate::InteractiveManagement(InteractiveUpdate::StartManagement((
+                tx,
+                dev_info,
+                auth_info,
+            )))) => {
                 debug!(
                     "STATUS: interactive management: {:#}, {:#?}",
                     dev_info, auth_info
@@ -68,6 +73,14 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                     {
                         println!("(5) Credential Management");
                         choices.push("5");
+                    }
+                    if info.options.bio_enroll == Some(true)
+                        || info.options.user_verification_mgmt_preview == Some(true)
+                    {
+                        println!("(6) List bio enrollments");
+                        choices.push("6");
+                        println!("(7) Add bio enrollment");
+                        choices.push("7");
                     }
 
                     let mut input = String::new();
@@ -146,6 +159,29 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                             ))
                             .expect("Failed to send Reset request.");
                         }
+                        "6" => {
+                            tx.send(InteractiveRequest::BioEnrollment(
+                                BioEnrollmentCmd::GetEnrollments,
+                            ))
+                            .expect("Failed to send Reset request.");
+                        }
+                        "7" => {
+                            let mut input = String::new();
+                            print!("The name of the new bio enrollment (leave empty if you don't want to name it): ");
+                            io::stdout()
+                                .lock()
+                                .flush()
+                                .expect("Failed to flush stdout!");
+                            io::stdin()
+                                .read_line(&mut input)
+                                .expect("error: unable to read user input");
+                            input = input.trim().to_string();
+                            let name = if input.is_empty() { None } else { Some(input) };
+                            tx.send(InteractiveRequest::BioEnrollment(
+                                BioEnrollmentCmd::StartNewEnrollment(name),
+                            ))
+                            .expect("Failed to send Reset request.");
+                        }
                         _ => {
                             panic!("Can't happen");
                         }
@@ -153,6 +189,12 @@ fn interactive_status_callback(status_rx: Receiver<StatusUpdate>) {
                 } else {
                     println!("Device only supports CTAP1 and can't be managed.");
                 }
+            }
+            Ok(StatusUpdate::InteractiveManagement(InteractiveUpdate::BioEnrollmentUpdate((
+                last_sample_status,
+                remaining_samples,
+            )))) => {
+                println!("Last sample status: {last_sample_status:?}, remaining samples: {remaining_samples:?}");
             }
             Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
                 num_of_devices += 1;

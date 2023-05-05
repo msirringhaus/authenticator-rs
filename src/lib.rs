@@ -38,6 +38,7 @@ mod manager;
 pub mod ctap2;
 pub use ctap2::attestation::AttestationObject;
 pub use ctap2::client_data::CollectedClientData;
+use ctap2::commands::bio_enrollment::BioEnrollmentResult;
 pub use ctap2::commands::client_pin::{Pin, PinError};
 use ctap2::commands::credential_management::CredentialManagementResult;
 pub use ctap2::commands::get_assertion::Assertion;
@@ -101,6 +102,7 @@ pub enum SignResult {
 pub enum ManageResult {
     Success,
     CredManagement(CredentialManagementResult),
+    BioEnrollment(BioEnrollmentResult),
 }
 
 pub type ResetResult = ();

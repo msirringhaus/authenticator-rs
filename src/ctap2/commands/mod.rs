@@ -12,6 +12,7 @@ use std::fmt;
 use std::io::{Read, Write};
 
 pub mod authenticator_config;
+pub mod bio_enrollment;
 pub(crate) mod client_pin;
 pub mod credential_management;
 pub(crate) mod get_assertion;
@@ -196,9 +197,11 @@ pub enum Command {
     ClientPin = 0x06,
     Reset = 0x07,
     GetNextAssertion = 0x08,
+    BioEnrollment = 0x09,
     CredentialManagement = 0x0A,
     Selection = 0x0B,
     AuthenticatorConfig = 0x0D,
+    BioEnrollmentPreview = 0x40,
     CredentialManagementPreview = 0x41,
 }
 

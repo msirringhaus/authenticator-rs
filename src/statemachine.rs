@@ -7,6 +7,9 @@ use crate::consts::PARAMETER_SIZE;
 use crate::crypto::COSEAlgorithm;
 use crate::ctap2::client_data::ClientDataHash;
 use crate::ctap2::commands::authenticator_config::{AuthConfigCommand, AuthenticatorConfig};
+use crate::ctap2::commands::bio_enrollment::{
+    BioEnrollment, BioEnrollmentCommand, BioEnrollmentResult,
+};
 use crate::ctap2::commands::client_pin::{
     ChangeExistingPin, Pin, PinError, PinUvAuthTokenPermission, SetNewPin,
 };
@@ -41,9 +44,9 @@ use crate::transport::{errors::HIDError, hid::HIDDevice, FidoDevice, Nonce};
 use crate::u2fprotocol::{u2f_init_device, u2f_is_keyhandle_valid, u2f_register, u2f_sign};
 use crate::u2ftypes::U2FDevice;
 use crate::{
-    send_status, AuthenticatorTransports, CredManagementCmd, InteractiveRequest, KeyHandle,
-    ManageResult, RegisterFlags, RegisterResult, ResetResult, SignFlags, SignResult, StatusPinUv,
-    StatusUpdate,
+    send_status, AuthenticatorTransports, BioEnrollmentCmd, CredManagementCmd, InteractiveRequest,
+    InteractiveUpdate, KeyHandle, ManageResult, RegisterFlags, RegisterResult, ResetResult,
+    SignFlags, SignResult, StatusPinUv, StatusUpdate,
 };
 use std::sync::mpsc::{channel, RecvError, RecvTimeoutError, Sender};
 use std::thread;
@@ -1410,6 +1413,155 @@ impl StateMachine {
         self.transaction = Some(try_or!(transaction, |e| cbc.call(Err(e))));
     }
 
+    fn bio_enrollment(
+        dev: &mut Device,
+        command: BioEnrollmentCmd,
+        status: Sender<crate::StatusUpdate>,
+        callback: StateCallback<crate::Result<crate::ManageResult>>,
+        alive: &dyn Fn() -> bool,
+    ) {
+        let authinfo = match dev.get_authenticator_info() {
+            Some(i) => i.clone(),
+            None => {
+                callback.call(Err(HIDError::DeviceNotInitialized.into()));
+                return;
+            }
+        };
+
+        if authinfo.options.bio_enroll != Some(true)
+            && authinfo.options.user_verification_mgmt_preview != Some(true)
+        {
+            callback.call(Err(AuthenticatorError::HIDError(
+                HIDError::UnsupportedCommand,
+            )));
+            return;
+        }
+
+        let use_legacy_preview = authinfo.options.bio_enroll != Some(true);
+
+        // We are not allowed to request the BE-permission using UV, so we have to skip UV
+        let mut skip_uv = authinfo.options.uv_bio_enroll != Some(true);
+        let timeout = 30 * 1000;
+
+        let mut bio_cmd = match &command {
+            BioEnrollmentCmd::StartNewEnrollment(_name) => BioEnrollment::new(
+                BioEnrollmentCommand::EnrollBegin(timeout),
+                use_legacy_preview,
+            ),
+            BioEnrollmentCmd::DeleteEnrollment(id) => BioEnrollment::new(
+                BioEnrollmentCommand::RemoveEnrollment(id.clone()),
+                use_legacy_preview,
+            ),
+            BioEnrollmentCmd::ChangeName((id, name)) => BioEnrollment::new(
+                BioEnrollmentCommand::SetFriendlyName((id.clone(), name.clone())),
+                use_legacy_preview,
+            ),
+            BioEnrollmentCmd::GetEnrollments => BioEnrollment::new(
+                BioEnrollmentCommand::EnumerateEnrollments,
+                use_legacy_preview,
+            ),
+        };
+
+        let mut skip_puap = false;
+        let mut pin_uv_auth_result = PinUvAuthResult::NoAuthRequired;
+        while alive() {
+            if !skip_puap {
+                pin_uv_auth_result = match Self::determine_puap_if_needed(
+                    &mut bio_cmd,
+                    dev,
+                    skip_uv,
+                    PinUvAuthTokenPermission::BioEnrollment,
+                    UserVerificationRequirement::Preferred,
+                    &status,
+                    &callback,
+                    alive,
+                ) {
+                    Ok(r) => r,
+                    Err(()) => {
+                        return;
+                    }
+                };
+            }
+
+            debug!("------------------------------------------------------------------");
+            debug!("{bio_cmd:?} using {pin_uv_auth_result:?}");
+            debug!("------------------------------------------------------------------");
+
+            let resp = dev.send_cbor_cancellable(&bio_cmd, alive);
+            match resp {
+                Ok(result) => {
+                    skip_puap = true;
+                    match bio_cmd.subcommand {
+                        BioEnrollmentCommand::EnrollBegin(..)
+                        | BioEnrollmentCommand::EnrollCaptureNextSample(..) => {
+                            let template_id =
+                                if let BioEnrollmentCommand::EnrollCaptureNextSample((id, ..)) =
+                                    bio_cmd.subcommand
+                                {
+                                    id
+                                } else {
+                                    unwrap_option!(result.template_id, callback)
+                                };
+                            let last_enroll_sample_status =
+                                unwrap_option!(result.last_enroll_sample_status, callback);
+                            let remaining_samples =
+                                unwrap_option!(result.remaining_samples, callback);
+
+                            send_status(
+                                &status,
+                                StatusUpdate::InteractiveManagement(
+                                    InteractiveUpdate::BioEnrollmentUpdate((
+                                        last_enroll_sample_status,
+                                        remaining_samples,
+                                    )),
+                                ),
+                            );
+
+                            if remaining_samples == 0 {
+                                if let BioEnrollmentCmd::StartNewEnrollment(Some(ref name)) =
+                                    command
+                                {
+                                    bio_cmd.subcommand = BioEnrollmentCommand::SetFriendlyName((
+                                        template_id.into_vec(),
+                                        name.clone(),
+                                    ));
+                                    unwrap_result!(bio_cmd.regenerate_puap(), callback);
+                                    continue;
+                                } else {
+                                    callback.call(Ok(ManageResult::Success));
+                                    return;
+                                }
+                            } else {
+                                bio_cmd.subcommand = BioEnrollmentCommand::EnrollCaptureNextSample(
+                                    (template_id, timeout),
+                                );
+                                unwrap_result!(bio_cmd.regenerate_puap(), callback);
+                                continue;
+                            }
+                        }
+                        BioEnrollmentCommand::EnumerateEnrollments => {
+                            let list = result.template_infos.iter().map(|x| x.into()).collect();
+                            callback.call(Ok(ManageResult::BioEnrollment(
+                                BioEnrollmentResult::EnrollmentList(list),
+                            )));
+                            return;
+                        }
+                        BioEnrollmentCommand::SetFriendlyName(_)
+                        | BioEnrollmentCommand::RemoveEnrollment(_)
+                        | BioEnrollmentCommand::CancelCurrentEnrollment => {
+                            callback.call(Ok(ManageResult::Success));
+                            return;
+                        }
+                        BioEnrollmentCommand::GetFingerprintSensorInfo => todo!(),
+                    };
+                }
+                Err(e) => {
+                    handle_errors!(e, status, callback, pin_uv_auth_result, skip_uv, skip_puap);
+                }
+            }
+        }
+    }
+
     fn credential_management(
         dev: &mut Device,
         command: CredManagementCmd,
@@ -1738,10 +1890,12 @@ impl StateMachine {
                 let (tx, rx) = channel();
                 send_status(
                     &status,
-                    crate::StatusUpdate::InteractiveManagement((
-                        tx,
-                        dev.get_device_info(),
-                        dev.get_authenticator_info().cloned(),
+                    crate::StatusUpdate::InteractiveManagement(InteractiveUpdate::StartManagement(
+                        (
+                            tx,
+                            dev.get_device_info(),
+                            dev.get_authenticator_info().cloned(),
+                        ),
                     )),
                 );
                 while alive() {
@@ -1782,6 +1936,15 @@ impl StateMachine {
                             Self::credential_management(
                                 &mut dev,
                                 cred_management,
+                                status,
+                                callback.clone(),
+                                alive,
+                            );
+                        }
+                        Ok(InteractiveRequest::BioEnrollment(bio_enrollment)) => {
+                            Self::bio_enrollment(
+                                &mut dev,
+                                bio_enrollment,
                                 status,
                                 callback.clone(),
                                 alive,

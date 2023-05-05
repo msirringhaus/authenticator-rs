@@ -1,6 +1,10 @@
 use super::{u2ftypes, Pin};
 use crate::ctap2::{
-    commands::{authenticator_config::AuthConfigCommand, get_info::AuthenticatorInfo},
+    commands::{
+        authenticator_config::AuthConfigCommand,
+        bio_enrollment::{BioTemplateId, LastEnrollmentSampleStatus},
+        get_info::AuthenticatorInfo,
+    },
     server::{PublicKeyCredentialId, User},
 };
 use serde::{Deserialize, Serialize as DeriveSer, Serializer};
@@ -14,12 +18,21 @@ pub enum CredManagementCmd {
 }
 
 #[derive(Debug, Deserialize, DeriveSer)]
+pub enum BioEnrollmentCmd {
+    GetEnrollments,
+    StartNewEnrollment(Option<String>),
+    DeleteEnrollment(BioTemplateId),
+    ChangeName((BioTemplateId, String)),
+}
+
+#[derive(Debug, Deserialize, DeriveSer)]
 pub enum InteractiveRequest {
     Reset,
     ChangePIN(Pin, Pin),
     SetPIN(Pin),
     ChangeConfig(AuthConfigCommand),
     CredentialManagement(CredManagementCmd),
+    BioEnrollment(BioEnrollmentCmd),
 }
 
 // Simply ignoring the Sender when serializing
@@ -66,6 +79,18 @@ pub enum StatusPinUv {
 }
 
 #[derive(Debug)]
+pub enum InteractiveUpdate {
+    StartManagement(
+        (
+            Sender<InteractiveRequest>,
+            u2ftypes::U2FDeviceInfo,
+            Option<AuthenticatorInfo>,
+        ),
+    ),
+    BioEnrollmentUpdate((LastEnrollmentSampleStatus, u64)),
+}
+
+#[derive(Debug)]
 pub enum StatusUpdate {
     /// Device found
     DeviceAvailable { dev_info: u2ftypes::U2FDeviceInfo },
@@ -82,13 +107,7 @@ pub enum StatusUpdate {
     /// and the register or signing process continues with this device
     DeviceSelected(u2ftypes::U2FDeviceInfo),
     /// Sent when a token was selected for interactive management
-    InteractiveManagement(
-        (
-            Sender<InteractiveRequest>,
-            u2ftypes::U2FDeviceInfo,
-            Option<AuthenticatorInfo>,
-        ),
-    ),
+    InteractiveManagement(InteractiveUpdate),
 }
 
 pub(crate) fn send_status(status: &Sender<StatusUpdate>, msg: StatusUpdate) {
