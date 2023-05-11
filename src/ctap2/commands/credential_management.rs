@@ -101,7 +101,7 @@ impl CredManagementCommand {
 pub struct CredentialManagement {
     pub(crate) subcommand: CredManagementCommand, // subCommand currently being requested
     pin_uv_auth_param: Option<PinUvAuthParam>, // First 16 bytes of HMAC-SHA-256 of contents using pinUvAuthToken.
-    pin_uv_auth_token: Option<PinUvAuthToken>, // TODO(MS): REMOVE ME, once we rebase on top of preflighting, then this is part of *_param
+    pin_uv_auth_token: Option<PinUvAuthToken>,
     pin: Option<Pin>,
     use_legacy_preview: bool,
 }
@@ -156,7 +156,7 @@ impl Serialize for CredentialManagement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CredentialManagementResponse {
     /// Number of existing discoverable credentials present on the authenticator.
     pub existing_resident_credentials_count: Option<u64>,
@@ -392,18 +392,19 @@ impl RequestCtap2 for CredentialManagement {
 
         let status: StatusCode = input[0].into();
 
-        if input.len() > 1 {
-            if status.is_ok() {
+        if status.is_ok() {
+            if input.len() > 1 {
                 trace!("parsing credential management data: {:#04X?}", &input);
                 let credential_management =
                     from_slice(&input[1..]).map_err(CommandError::Deserializing)?;
                 Ok(credential_management)
             } else {
-                let data: Value = from_slice(&input[1..]).map_err(CommandError::Deserializing)?;
-                Err(CommandError::StatusCode(status, Some(data)).into())
+                // Some subcommands return only an OK-status without any data
+                Ok(CredentialManagementResponse::default())
             }
         } else {
-            Err(CommandError::InputTooSmall.into())
+            let data: Value = from_slice(&input[1..]).map_err(CommandError::Deserializing)?;
+            Err(CommandError::StatusCode(status, Some(data)).into())
         }
     }
 }
