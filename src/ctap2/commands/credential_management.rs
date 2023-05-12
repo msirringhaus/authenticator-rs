@@ -458,8 +458,4 @@ impl PinUvAuthCommand for CredentialManagement {
     fn get_pin_uv_auth_param(&self) -> Option<&PinUvAuthParam> {
         self.pin_uv_auth_param.as_ref()
     }
-
-    fn get_uv_option(&mut self) -> Option<bool> {
-        None
-    }
 }

@@ -250,10 +250,6 @@ impl PinUvAuthCommand for AuthenticatorConfig {
         self.pin_uv_auth_param.as_ref()
     }
 
-    fn get_uv_option(&mut self) -> Option<bool> {
-        None
-    }
-
     fn get_rp_id(&self) -> Option<&String> {
         None
     }

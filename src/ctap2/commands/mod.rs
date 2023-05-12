@@ -137,7 +137,6 @@ pub(crate) trait PinUvAuthCommand: RequestCtap2 {
     ) -> Result<(), AuthenticatorError>;
     fn get_pin_uv_auth_param(&self) -> Option<&PinUvAuthParam>;
     fn set_uv_option(&mut self, uv: Option<bool>);
-    fn get_uv_option(&mut self) -> Option<bool>;
     fn get_rp_id(&self) -> Option<&String>;
     fn can_skip_user_verification(
         &mut self,
