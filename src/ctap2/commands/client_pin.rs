@@ -34,6 +34,7 @@ pub enum PINSubcommand {
 }
 
 bitflags! {
+    #[derive(Deserialize, Serialize)]
     pub struct PinUvAuthTokenPermission: u8 {
         const MakeCredential = 0x01;             // rp_id required
         const GetAssertion = 0x02;               // rp_id required

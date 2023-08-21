@@ -6,6 +6,7 @@ use crate::ctap2::commands::client_pin::PinUvAuthTokenPermission;
 use crate::ctap2::commands::get_info::AuthenticatorInfo;
 use crate::errors::AuthenticatorError;
 use crate::{ctap2::commands::CommandError, transport::errors::HIDError};
+use serde::de;
 use serde::{
     de::{Error as SerdeError, MapAccess, Unexpected, Visitor},
     ser::SerializeMap,
@@ -80,6 +81,48 @@ where
 impl Clone for PinUvAuthProtocol {
     fn clone(&self) -> Self {
         PinUvAuthProtocol(self.0.as_ref().clone_box())
+    }
+}
+
+impl Serialize for PinUvAuthProtocol {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.id())
+    }
+}
+
+impl<'de> Deserialize<'de> for PinUvAuthProtocol {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PinUvAuthProtocolVisitor;
+
+        impl<'de> Visitor<'de> for PinUvAuthProtocolVisitor {
+            type Value = PinUvAuthProtocol;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("u64")
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match v {
+                    1 => Ok(PinUvAuthProtocol(Box::new(PinUvAuth1 {}))),
+                    2 => Ok(PinUvAuthProtocol(Box::new(PinUvAuth2 {}))),
+                    x => Err(E::invalid_value(
+                        Unexpected::Unsigned(x),
+                        &"Valid pin protocol version",
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_u64(PinUvAuthProtocolVisitor)
     }
 }
 
@@ -355,7 +398,7 @@ impl SharedSecret {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PinUvAuthToken {
     pub pin_protocol: PinUvAuthProtocol,
     pin_token: Vec<u8>,

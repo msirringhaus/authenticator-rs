@@ -30,7 +30,7 @@ pub enum BioEnrollmentCmd {
     ChangeName(BioTemplateId, String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub enum InteractiveRequest {
     Quit,
     Reset,
@@ -84,8 +84,24 @@ pub enum StatusPinUv {
     UvBlocked,
 }
 
-#[derive(Debug)]
+// Simply ignoring the Sender when serializing
+pub(crate) fn serialize_start_management<S>(
+    (_, authinfo): &(Sender<InteractiveRequest>, Option<AuthenticatorInfo>),
+    s: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if let Some(i) = authinfo {
+        s.serialize_some(i)
+    } else {
+        s.serialize_none()
+    }
+}
+
+#[derive(Debug, DeriveSer)]
 pub enum InteractiveUpdate {
+    #[serde(serialize_with = "serialize_start_management")]
     StartManagement((Sender<InteractiveRequest>, Option<AuthenticatorInfo>)),
     // We provide the already determined PUAT to be able to issue more requests without
     // forcing the user to enter another PIN.

@@ -7,6 +7,7 @@ use crate::ctap2::server::UserVerificationRequirement;
 use crate::errors::AuthenticatorError;
 use crate::transport::errors::{ApduErrorStatus, HIDError};
 use crate::transport::{FidoDevice, VirtualFidoDevice};
+use serde::{Deserialize, Serialize};
 use serde_cbor::{error::Error as CborError, Value};
 use serde_json as json;
 use std::error::Error as StdErrorT;
@@ -92,7 +93,7 @@ pub trait RequestCtap2: fmt::Debug {
     ) -> Result<Self::Output, HIDError>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PinUvAuthResult {
     /// Request is CTAP1 and does not need PinUvAuth
     RequestIsCtap1,
